@@ -2,6 +2,7 @@
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  transpilePackages: ["@source-authority/shared"],
   experimental: {
     typedRoutes: true,
   },

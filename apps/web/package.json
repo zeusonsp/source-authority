@@ -11,9 +11,13 @@
     "clean": "rimraf .next .turbo"
   },
   "dependencies": {
+    "@source-authority/shared": "workspace:*",
+    "@supabase/ssr": "^0.5.1",
+    "@supabase/supabase-js": "^2.45.4",
     "next": "14.2.13",
     "react": "18.3.1",
     "react-dom": "18.3.1",
+    "server-only": "^0.0.1",
     "zod": "^3.23.8",
     "clsx": "^2.1.1",
     "tailwind-merge": "^2.5.4",
