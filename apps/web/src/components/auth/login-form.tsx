@@ -2,7 +2,8 @@
 
 import { useFormState, useFormStatus } from "react-dom";
 import { useSearchParams } from "next/navigation";
-import { signInWithPassword, type AuthState } from "@/app/actions/auth";
+import { signInWithPassword } from "@/app/actions/auth";
+import type { AuthState } from "@/lib/auth/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

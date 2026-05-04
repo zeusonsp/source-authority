@@ -1,7 +1,8 @@
 "use client";
 
 import { useFormState, useFormStatus } from "react-dom";
-import { resendConfirmation, type AuthState } from "@/app/actions/auth";
+import { resendConfirmation } from "@/app/actions/auth";
+import type { AuthState } from "@/lib/auth/types";
 import { Button } from "@/components/ui/button";
 
 const INITIAL_STATE: AuthState = {};

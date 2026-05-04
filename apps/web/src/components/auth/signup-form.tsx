@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useFormState, useFormStatus } from "react-dom";
 import { CheckCircle2 } from "lucide-react";
-import { signUpWithPassword, type AuthState } from "@/app/actions/auth";
+import { signUpWithPassword } from "@/app/actions/auth";
+import type { AuthState } from "@/lib/auth/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

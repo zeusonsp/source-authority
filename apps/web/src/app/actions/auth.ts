@@ -8,27 +8,8 @@ import {
   resendConfirmationSchema,
   signupSchema,
 } from "@/lib/auth/schemas";
+import type { AuthState } from "@/lib/auth/types";
 import { createClient } from "@/lib/supabase/server";
-
-export type AuthState = {
-  errors?: {
-    email?: string[];
-    password?: string[];
-    display_name?: string[];
-    confirm_password?: string[];
-    _form?: string[];
-  };
-  success?: boolean;
-  message?: string;
-  /** Sinaliza pra UI mostrar link "Reenviar confirmação". */
-  emailNotConfirmed?: boolean;
-  /** Echo do e-mail pra reenvio sem o user reescrever. */
-  email?: string;
-};
-
-const INITIAL_STATE: AuthState = {};
-
-export { INITIAL_STATE as authInitialState };
 
 export async function signInWithPassword(
   _prev: AuthState,
