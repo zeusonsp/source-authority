@@ -103,6 +103,50 @@ export type Database = {
           },
         ]
       }
+      events: {
+        Row: {
+          company_id: string
+          created_at: string
+          device: string | null
+          id: string
+          ip_city: string | null
+          ip_country: string | null
+          lang: string | null
+          referrer: string | null
+          user_agent: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          device?: string | null
+          id?: string
+          ip_city?: string | null
+          ip_country?: string | null
+          lang?: string | null
+          referrer?: string | null
+          user_agent?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          device?: string | null
+          id?: string
+          ip_city?: string | null
+          ip_country?: string | null
+          lang?: string | null
+          referrer?: string | null
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "events_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       memberships: {
         Row: {
           company_id: string
