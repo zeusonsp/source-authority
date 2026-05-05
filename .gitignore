@@ -39,3 +39,6 @@ Thumbs.db
 *.pem
 .cache/
 *.tsbuildinfo
+
+# Claude Code persistent memory (per-session, não-projeto)
+.claude/

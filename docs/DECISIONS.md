@@ -23,6 +23,23 @@ A cada decisão técnica não-trivial, adicione uma entrada nova ao topo seguind
 
 ## Decisões
 
+### 2026-05-04 · Workaround de cast manual para @supabase/ssr 0.5.2 (type propagation)
+
+- **Contexto:** Durante a Fase 2 (onboarding), descobrimos que o pacote `@supabase/ssr@0.5.2` (versão original do bootstrap) não propaga corretamente o generic `Database` para `.from().select()` e `.rpc()` quando combinado com `@supabase/supabase-js@2.105.1` (resolvido via caret `^2.45.4` no package.json original). Sintomas: `data` de `from().select("*")` tipado como `never[]` ao invés do `Row[]` esperado; args de `rpc()` tipados como `undefined`. Bloqueia tipagem das queries em `memberships`, `companies` e dos RPCs `is_slug_available` e `create_company`.
+- **Opções consideradas:**
+  - A) Subir `@supabase/ssr` pra `^0.10.2` (latest estável) agora — risco de regressionar fluxo de auth (signup, login, callback, signOut, magic link) já testado e funcionando em produção dogfood.
+  - B) Cast manual em 3 lugares específicos, marcados com `TODO(ssr-0.5.2)` pra grep posterior — workaround pontual, zero risco de regressão de auth.
+  - C) Wrappers tipados sobre `from()`/`rpc()` em `@/lib/supabase/typed.ts` — overhead de manutenção alto pra MVP, prematuro.
+- **Decisão:** Opção B
+- **Justificativa:** Bump de versão do SSR é mudança não-trivial que pede revalidação de auth flow inteiro (signup, login, OAuth callback, refresh token, signOut). Fase 2 tem foco em onboarding + dogfood com Zeus — abrir frente paralela de upgrade de SSR adiciona risco e tempo. Casts pontuais com TODO marker padronizado custam ~6 linhas e mantêm a Fase 2 entregável sem regressão. Resolução planejada na Fase 2.5, em commit dedicado de bump + revalidação completa.
+- **Escopo dos workarounds:** 3 lugares no código, todos marcados com `TODO(ssr-0.5.2)`:
+  - `apps/web/src/app/(app)/dashboard/page.tsx` (2 selects: memberships e companies)
+  - `apps/web/src/app/(app)/onboarding/actions.ts` (1 rpc: create_company)
+  - `apps/web/src/app/(app)/onboarding/onboarding-form.tsx` (1 rpc: is_slug_available)
+- **Validação pré-cast:** todos os 3 lugares têm Zod parse server-side (action) ou pre-checks client-side (form) que garantem o shape correto dos args. O cast `as never` apenas calar o type checker; não bypassa validação real.
+- **Status:** active (resolução prevista Fase 2.5)
+- **Decidido por:** Nathan + @architect
+
 ### 2026-05-03 · Estratégia dogfood-first com Zeus Tecnologia (Caminho 5)
 
 - **Contexto:** Após concluir a Fase 1 (auth + base), Nathan considerou três alternativas para o próximo chunk: (a) Caminho 1 — sidebar + 5 placeholders e seguir o ROADMAP linearmente; (b) Caminho 2 — `/dashboard` rico com mock data, demais páginas placeholder; (c) Caminho 4 — Chunk B+ original com 5 páginas mockadas. A análise do `@architect` apontou que (b) e (c) violam a filosofia "ship → measure → iterate" do ROADMAP, geram retrabalho de 30-70% quando dados reais chegarem nas Fases 3-4, e caem no anti-padrão "demo trap" alertado no briefing seção 08. Founder identificou um caminho não listado: usar o Zeus Tecnologia (@zeustecnologiaonlife, 712k seguidores no IG, tráfego real diário) como primeiro cliente real para validação técnica em produção.
