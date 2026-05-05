@@ -1,3 +1,4 @@
+import { AppShell } from "@/components/app/app-shell";
 import { requireAuth } from "@/lib/auth/server";
 
 /**
@@ -7,13 +8,21 @@ import { requireAuth } from "@/lib/auth/server";
  * adicionada e o middleware não pegar (ex: bug no matcher de PUBLIC_PATHS),
  * esse `requireAuth` corrige no layer da layout.
  *
- * Sidebar + topbar virão no Chunk B.
+ * Renderiza o shell autenticado (sidebar 240px + topbar) ao redor das
+ * páginas filhas. Onboarding é uma página filha — o redirecionamento de
+ * "fresh user → /onboarding" mora em /dashboard, não aqui (porque /onboarding
+ * em si precisa do shell pra renderizar).
  */
 export default async function AppLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  await requireAuth();
-  return <>{children}</>;
+  const { user, profile } = await requireAuth();
+
+  return (
+    <AppShell email={user.email} displayName={profile.display_name}>
+      {children}
+    </AppShell>
+  );
 }
