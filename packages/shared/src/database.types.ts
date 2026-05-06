@@ -61,6 +61,7 @@ export type Database = {
           cnpj: string | null
           created_at: string
           created_by: string | null
+          default_redirect_url: string | null
           id: string
           name: string
           plan: string
@@ -73,6 +74,7 @@ export type Database = {
           cnpj?: string | null
           created_at?: string
           created_by?: string | null
+          default_redirect_url?: string | null
           id?: string
           name: string
           plan?: string
@@ -85,6 +87,7 @@ export type Database = {
           cnpj?: string | null
           created_at?: string
           created_by?: string | null
+          default_redirect_url?: string | null
           id?: string
           name?: string
           plan?: string
@@ -244,6 +247,16 @@ export type Database = {
       log_audit_event: {
         Args: { _action: string; _company_id: string; _payload?: Json }
         Returns: string
+      }
+      update_company: {
+        Args: {
+          _company_id: string
+          _default_redirect_url?: string
+          _name: string
+          _segment: string
+          _size: string
+        }
+        Returns: undefined
       }
     }
     Enums: {
