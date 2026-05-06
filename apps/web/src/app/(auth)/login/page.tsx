@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { LoginForm } from "@/components/auth/login-form";
 
 export const metadata = {
@@ -15,7 +16,11 @@ export default function LoginPage() {
         </p>
       </div>
 
-      <LoginForm />
+      {/* Suspense isola useSearchParams() do form pra não bailar o
+          prerender estático da página inteira (Next 14 App Router). */}
+      <Suspense fallback={<div className="h-48" />}>
+        <LoginForm />
+      </Suspense>
 
       <div className="space-y-2 text-center text-sm">
         <p>
