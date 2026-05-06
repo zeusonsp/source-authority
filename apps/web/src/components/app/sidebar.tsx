@@ -44,7 +44,7 @@ const NAV_ITEMS: readonly NavItem[] = [
     href: "/relatorios",
     label: "Relatórios",
     icon: FileBarChart,
-    badge: "Fase 4",
+    badge: null,
   },
   {
     href: "/configuracoes",

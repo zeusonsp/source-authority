@@ -236,8 +236,22 @@ function KpiGrid({ stats }: { stats: Stats }) {
   return (
     <section
       aria-label="KPIs"
-      className="grid grid-cols-2 gap-3 md:grid-cols-4"
+      className="space-y-3"
     >
+      <div className="flex items-center justify-between">
+        <p className="text-xs uppercase tracking-wide text-muted-foreground">
+          Visão geral
+        </p>
+        <a
+          href="/relatorios"
+          className="text-xs text-accent underline-offset-4 hover:underline"
+        >
+          Ver relatórios completos →
+        </a>
+      </div>
+      <div
+        className="grid grid-cols-2 gap-3 md:grid-cols-4"
+      >
       {cards.map((c) => (
         <div
           key={c.label}
@@ -249,6 +263,7 @@ function KpiGrid({ stats }: { stats: Stats }) {
           <p className="mt-2 text-2xl font-semibold tabular-nums">{c.value}</p>
         </div>
       ))}
+      </div>
     </section>
   );
 }
