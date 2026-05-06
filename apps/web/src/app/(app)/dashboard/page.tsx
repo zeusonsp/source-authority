@@ -172,7 +172,15 @@ function CompanyCard({
             <span className="font-mono text-foreground">{company.slug}</span>
           </p>
         </div>
-        <PlanBadge plan={company.plan} />
+        <div className="flex flex-col items-end gap-2">
+          <PlanBadge plan={company.plan} />
+          <a
+            href="/configuracoes"
+            className="text-xs text-accent underline-offset-4 hover:underline"
+          >
+            Editar em Configurações →
+          </a>
+        </div>
       </div>
 
       <div className="mt-5 flex flex-wrap items-center gap-3 rounded-md border border-border bg-background/40 px-3 py-2">
