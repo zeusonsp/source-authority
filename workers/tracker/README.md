@@ -19,7 +19,7 @@ Worker sobe em `http://localhost:8787`. Teste:
 
 ```bash
 curl -i http://localhost:8787/zeus
-# Esperado: 302 Location: https://zeusoficial.com.br
+# Esperado: 302 Location: https://zeusoficial.com
 
 curl -i http://localhost:8787/slug-inexistente
 # Esperado: 404 com HTML "Link não encontrado"
@@ -48,7 +48,7 @@ URL ficará em `https://source-authority-tracker.<subdomain>.workers.dev`.
 
 ## Decisões arquiteturais
 
-- **Hardcoded pra Zeus (Fase 3)**: redirect target = `https://zeusoficial.com.br`. TODO no `src/index.ts` pra generalizar quando 2º cliente entrar (lookup de `companies.redirect_url` ou similar).
+- **Hardcoded pra Zeus (Fase 3)**: redirect target = `https://zeusoficial.com`. TODO no `src/index.ts` pra generalizar quando 2º cliente entrar (lookup de `companies.redirect_url` ou similar).
 - **`service_role` key**: necessário pro INSERT em `events` — RLS bloqueia escrita pra `authenticated`/`anon`; `service_role` bypassa via `BYPASSRLS`.
 - **Insert com `ctx.waitUntil` + race de 200ms**: redirect não fica refém de latência do PostgREST. Inserts lentos continuam em background sem bloquear o redirect.
 - **Subdomínio `.workers.dev` gratuito**: MVP. Custom domain (`oficial.sourceauthority.com.br`) entra junto do GTM, não nesta fase.

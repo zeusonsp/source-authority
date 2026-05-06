@@ -19,7 +19,7 @@ interface Env {
 }
 
 // HARDCODED Zeus dogfood. TODO: generalizar quando 2º cliente entrar.
-const REDIRECT_TARGET = "https://zeusoficial.com.br";
+const REDIRECT_TARGET = "https://zeusoficial.com";
 
 // Limite pro INSERT antes de redirecionar. Insert continua em background
 // via ctx.waitUntil; redirect não fica refém da latência do PostgREST.
