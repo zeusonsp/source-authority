@@ -100,6 +100,7 @@ Itens conhecidos que precisam ser endereçados em fase futura. Nenhum bloqueia o
 - **`PRODUCT_SPEC.md` §7 — 3 → 4 roles** (commit separado, antes de fechar Fase 2): spec lista `admin/member/viewer` mas a migration 0002 introduziu `owner` separado de `admin`. Update doc-only.
 - **Slug discipline em queries** (regra perene, código novo): SEMPRE passar slug do user input por `normalizeSlug()` (de `@source-authority/shared`) antes de query/insert em `companies.slug`. Util já existe em `packages/shared/src/slug.ts`. text+CHECK no DB não tolera case mismatch silencioso — query com case errado retorna zero rows sem erro.
 - **RPC `accept_invitation` + tabela `invitations`** (Fase 2.5/3): fluxo "owner convida por email → andre clica no link → vira member" não funciona com o schema atual (policy `memberships_insert_admin` exige caller admin). Resolução planejada: tabela `invitations` com token + RPC SECURITY DEFINER `accept_invitation`.
+- **Worker `tracker` — bounded await em vez de pure `ctx.waitUntil`** (Fase 3.5): `workers/tracker/src/index.ts` faz `ctx.waitUntil(insertPromise)` mas TAMBÉM `await Promise.race([insert, timeout(200ms)])` — redirect espera até 200ms se PostgREST estiver lento. Pattern canônico Cloudflare é só `ctx.waitUntil(insertPromise)` + return imediato (insert continua em background sem bloquear nada). Trocar reduz latência percebida em workers da Cloudflare. Detalhes em `feedback_cf_worker_waituntil_pattern.md`.
 
 ## Quando travar — pergunte ao Nathan
 

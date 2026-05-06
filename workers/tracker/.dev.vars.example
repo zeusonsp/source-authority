@@ -1,0 +1,13 @@
+# Secrets do worker pra `wrangler dev` local.
+# Copie este arquivo pra .dev.vars (gitignored) e preencha com valores reais.
+#
+# Em produção, configure via:
+#   wrangler secret put SUPABASE_URL
+#   wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+
+# URL pública do projeto Supabase.
+SUPABASE_URL="https://<project-ref>.supabase.co"
+
+# Service role key — bypassa RLS pra INSERT em events. NUNCA expor pro
+# browser. Pega no dashboard Supabase: Settings → API → service_role.
+SUPABASE_SERVICE_ROLE_KEY="<service-role-jwt>"
