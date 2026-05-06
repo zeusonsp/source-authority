@@ -25,7 +25,8 @@ export type CompanySize = (typeof COMPANY_SIZES)[number];
  * - name: trim + min 2 (igual policy do display_name).
  * - slug: trim + lowercase + valida formato (paridade com CHECK do DB) +
  *         rejeita reservados. Server action re-valida via RPC create_company.
- * - segment: TODO virar enum quando tivermos lista canônica de segmentos.
+ * - segment: Tech debt (rastreado em CLAUDE.md) — virar enum quando
+ *   tivermos lista canônica de segmentos. Hoje é text livre.
  * - size: enum fechado, default 11-50.
  *
  * CNPJ não está aqui — opcional, preenchido depois em /configuracoes.
