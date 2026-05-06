@@ -48,7 +48,7 @@ URL ficará em `https://source-authority-tracker.<subdomain>.workers.dev`.
 
 ## Decisões arquiteturais
 
-- **Hardcoded pra Zeus (Fase 3)**: redirect target = `https://zeusoficial.com`. TODO no `src/index.ts` pra generalizar quando 2º cliente entrar (lookup de `companies.redirect_url` ou similar).
+- **Multi-tenant via `companies.default_redirect_url`** (Bloco A, 2026-05-06): cada empresa configura seu destino na coluna `default_redirect_url` (CHECK força HTTPS only). Worker faz `select=id,default_redirect_url` no lookup do slug. URL null/vazia → 404 "empresa sem destino configurado". Configuração via UI em `/configuracoes` → RPC `update_company`.
 - **`service_role` key**: necessário pro INSERT em `events` — RLS bloqueia escrita pra `authenticated`/`anon`; `service_role` bypassa via `BYPASSRLS`.
 - **Insert com `ctx.waitUntil` + race de 200ms**: redirect não fica refém de latência do PostgREST. Inserts lentos continuam em background sem bloquear o redirect.
 - **Subdomínio `.workers.dev` gratuito**: MVP. Custom domain (`oficial.sourceauthority.com.br`) entra junto do GTM, não nesta fase.

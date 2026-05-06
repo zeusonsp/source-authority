@@ -1,16 +1,19 @@
 /**
  * source-authority-tracker — Worker do link mestre.
  *
- * Fluxo: GET /[slug] → lookup company por slug → INSERT em events →
- *        302 pra URL destino da empresa.
+ * Fluxo: GET /[slug] → lookup company por slug (id + default_redirect_url) →
+ *        INSERT em events → 302 pra companies.default_redirect_url.
+ *
+ * Multi-tenant: cada empresa configura seu destino em
+ * `companies.default_redirect_url` via /configuracoes (RPC update_company).
+ * Worker lê esse campo no lookup do slug. Se null/vazio → 404 "empresa
+ * sem destino configurado".
  *
  * Insert é fire-and-forget bounded a 200ms (ctx.waitUntil mantém o promise
  * vivo após o response; race com timeout permite o redirect ocorrer rápido
  * mesmo se PostgREST estiver lento). Falha de insert não atrapalha o
- * redirect.
- *
- * HARDCODED pra Zeus (Fase 3 dogfood). Generalizar quando 2º cliente
- * entrar — vira lookup de `companies.redirect_url` ou similar.
+ * redirect. Tech debt: pure ctx.waitUntil sem bounded await — ver
+ * memória/CLAUDE.md (Fase 3.5).
  */
 
 interface Env {
@@ -18,15 +21,13 @@ interface Env {
   SUPABASE_SERVICE_ROLE_KEY: string;
 }
 
-// HARDCODED Zeus dogfood. TODO: generalizar quando 2º cliente entrar.
-const REDIRECT_TARGET = "https://zeusoficial.com";
-
 // Limite pro INSERT antes de redirecionar. Insert continua em background
 // via ctx.waitUntil; redirect não fica refém da latência do PostgREST.
 const INSERT_TIMEOUT_MS = 200;
 
 interface CompanyRow {
   id: string;
+  default_redirect_url: string | null;
 }
 
 interface EventPayload {
@@ -61,6 +62,13 @@ export default {
       return notFound();
     }
 
+    // Empresa existe mas não configurou destino. Sem evento — não há
+    // redirect pra rastrear. Retorna 404 com mensagem específica pra
+    // distinguir de "slug inexistente".
+    if (!company.default_redirect_url) {
+      return notConfigured();
+    }
+
     const event = buildEvent(request, company.id);
 
     // Fire-and-forget com bounded await. ctx.waitUntil mantém o promise
@@ -77,7 +85,7 @@ export default {
       ),
     ]);
 
-    return Response.redirect(REDIRECT_TARGET, 302);
+    return Response.redirect(company.default_redirect_url, 302);
   },
 };
 
@@ -91,7 +99,7 @@ async function lookupCompany(
 ): Promise<CompanyRow | null> {
   const url = `${env.SUPABASE_URL}/rest/v1/companies?slug=eq.${encodeURIComponent(
     slug,
-  )}&select=id`;
+  )}&select=id,default_redirect_url`;
   const resp = await fetch(url, {
     headers: {
       apikey: env.SUPABASE_SERVICE_ROLE_KEY,
@@ -200,6 +208,37 @@ function notFound(): Response {
   <main>
     <h1>Link não encontrado</h1>
     <p>Esse endereço não corresponde a nenhuma empresa cadastrada na Source Authority.</p>
+  </main>
+</body>
+</html>`;
+  return new Response(html, {
+    status: 404,
+    headers: { "Content-Type": "text/html; charset=utf-8" },
+  });
+}
+
+function notConfigured(): Response {
+  const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Empresa sem destino configurado · Source Authority</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; background: #0A0A0A;
+      color: #FAFAFA; display: flex; align-items: center; justify-content: center;
+      min-height: 100vh; margin: 0; }
+    main { text-align: center; max-width: 460px; padding: 2rem; }
+    h1 { font-size: 1.5rem; margin: 0 0 1rem; color: #C9A94B; font-weight: 600; }
+    p { color: #888; margin: 0 0 1rem; line-height: 1.5; font-size: 0.95rem; }
+    p.hint { color: #666; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Empresa sem destino configurado</h1>
+    <p>O administrador desta empresa ainda não configurou o link mestre.</p>
+    <p class="hint">Se você é admin/owner desta conta, acesse o painel da Source Authority e configure o destino em Configurações → Link mestre.</p>
   </main>
 </body>
 </html>`;
