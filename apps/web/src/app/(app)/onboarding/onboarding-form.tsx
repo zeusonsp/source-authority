@@ -65,11 +65,9 @@ export function OnboardingForm() {
     setSlugStatus("checking");
     let cancelled = false;
     const timer = setTimeout(async () => {
-      // TODO(ssr-0.5.2): remove cast quando subir @supabase/ssr
-      //                   pra ^0.10.2 (Fase 2.5)
       const { data, error } = await supabase.rpc("is_slug_available", {
         _slug: normalizedSlug,
-      } as never);
+      });
       if (cancelled) return;
       if (error) {
         // Erro na RPC = volta pra idle (não bloqueia submit; server action revalida).

@@ -36,17 +36,13 @@ export async function updateCompanyAction(
 
   const supabase = createClient();
 
-  // TODO(ssr-0.5.2): remove cast quando subir @supabase/ssr
-  //                   pra ^0.10.2 (Fase 2.5)
-  // Sintoma: rpc() Args inferida como `undefined`. Validation já feita
-  // via Zod parse acima — `as never` é só pra calar o type checker.
   const { error } = await supabase.rpc("update_company", {
     _company_id: parsed.data.company_id,
     _name: parsed.data.name,
     _segment: parsed.data.segment,
     _size: parsed.data.size,
-    _default_redirect_url: parsed.data.default_redirect_url,
-  } as never);
+    _default_redirect_url: parsed.data.default_redirect_url ?? undefined,
+  });
 
   if (error) {
     // RPC usa 42501 pra unauthenticated E pra forbidden. Distinguir

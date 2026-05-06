@@ -16,10 +16,6 @@ export type ExportEventsCSVResult =
   | { ok: false; code: "too_large"; message: string }
   | { ok: false; code: "unknown"; message: string };
 
-// TODO(ssr-0.5.2): remove cast quando subir @supabase/ssr
-//                   pra ^0.10.2 (Fase 2.5)
-type Membership = Tables<"memberships">;
-type Company = Tables<"companies">;
 type EventRow = Pick<
   Tables<"events">,
   | "created_at"
@@ -44,11 +40,10 @@ export async function exportEventsCSV(
 ): Promise<ExportEventsCSVResult> {
   const supabase = createClient();
 
-  const membershipsResult = await supabase
+  const { data: memberships } = await supabase
     .from("memberships")
     .select("*")
     .limit(1);
-  const memberships = membershipsResult.data as Membership[] | null;
   if (!memberships || memberships.length === 0) {
     return {
       ok: false,
@@ -57,12 +52,11 @@ export async function exportEventsCSV(
     };
   }
 
-  const companyResult = await supabase
+  const { data: company } = await supabase
     .from("companies")
     .select("*")
     .eq("id", memberships[0]!.company_id)
     .single();
-  const company = companyResult.data as Company | null;
   if (!company) {
     return {
       ok: false,
@@ -71,7 +65,7 @@ export async function exportEventsCSV(
     };
   }
 
-  const eventsResult = await supabase
+  const { data: eventsData } = await supabase
     .from("events")
     .select("created_at, device, ip_country, ip_city, lang, referrer, user_agent")
     .eq("company_id", company.id)
@@ -80,7 +74,7 @@ export async function exportEventsCSV(
     .order("created_at", { ascending: false })
     .limit(MAX_EXPORT_ROWS + 1);
 
-  const events = (eventsResult.data as EventRow[] | null) ?? [];
+  const events = eventsData ?? [];
 
   if (events.length > MAX_EXPORT_ROWS) {
     return {

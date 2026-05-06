@@ -1,15 +1,8 @@
 import { redirect } from "next/navigation";
-import type { Tables } from "@source-authority/shared/database.types";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { requireAuth } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { ConfiguracoesForm } from "./configuracoes-form";
-
-// TODO(ssr-0.5.2): remove cast quando subir @supabase/ssr
-//                   pra ^0.10.2 (Fase 2.5)
-// Sintoma: from().select() retorna `never[]` em vez de Row[] tipado.
-type Membership = Tables<"memberships">;
-type Company = Tables<"companies">;
 
 export const metadata = {
   title: "Configurações",
@@ -21,23 +14,21 @@ export default async function ConfiguracoesPage() {
 
   // Mesma estratégia do dashboard: lê 1 membership do user e a company
   // associada. RLS garante que só rows acessíveis voltam.
-  const membershipsResult = await supabase
+  const { data: memberships } = await supabase
     .from("memberships")
     .select("*")
     .limit(1);
-  const memberships = membershipsResult.data as Membership[] | null;
 
   if (!memberships || memberships.length === 0) {
     redirect("/onboarding");
   }
 
   const membership = memberships[0]!;
-  const companyResult = await supabase
+  const { data: company } = await supabase
     .from("companies")
     .select("*")
     .eq("id", membership.company_id)
     .single();
-  const company = companyResult.data as Company | null;
 
   if (!company) {
     redirect("/onboarding");

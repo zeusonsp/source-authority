@@ -1,15 +1,8 @@
 import { redirect } from "next/navigation";
-import type { Tables } from "@source-authority/shared/database.types";
 import { requireAuth } from "@/lib/auth/server";
 import { aggregate, resolveRange } from "@/lib/relatorios/aggregations";
-import type { EventForAggregation } from "@/lib/relatorios/types";
 import { createClient } from "@/lib/supabase/server";
 import { RelatoriosClient } from "./relatorios-client";
-
-// TODO(ssr-0.5.2): remove cast quando subir @supabase/ssr
-//                   pra ^0.10.2 (Fase 2.5)
-// Sintoma: from().select() retorna `never[]` em vez de Row[] tipado.
-type Membership = Tables<"memberships">;
 
 export const metadata = {
   title: "Relatórios",
@@ -24,11 +17,10 @@ export default async function RelatoriosPage({ searchParams }: PageProps) {
   const supabase = createClient();
 
   // Onboarding gate (mesmo padrão do dashboard).
-  const membershipsResult = await supabase
+  const { data: memberships } = await supabase
     .from("memberships")
     .select("*")
     .limit(1);
-  const memberships = membershipsResult.data as Membership[] | null;
   if (!memberships || memberships.length === 0) {
     redirect("/onboarding");
   }
@@ -39,7 +31,7 @@ export default async function RelatoriosPage({ searchParams }: PageProps) {
   // Pull único de events no range; agregação em memória (Server Component).
   // Padrão do dashboard. Tech debt: trocar por RPC quando >10k eventos
   // virar gargalo medido.
-  const eventsResult = await supabase
+  const { data: events } = await supabase
     .from("events")
     .select("created_at, ip_country, device, lang, referrer")
     .eq("company_id", membership.company_id)
@@ -47,9 +39,7 @@ export default async function RelatoriosPage({ searchParams }: PageProps) {
     .lte("created_at", range.to)
     .order("created_at", { ascending: false });
 
-  const events =
-    (eventsResult.data as EventForAggregation[] | null) ?? [];
-  const data = aggregate(range, events);
+  const data = aggregate(range, events ?? []);
 
   return (
     <div className="container py-8">

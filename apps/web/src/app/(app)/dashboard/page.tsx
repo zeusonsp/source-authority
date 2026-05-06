@@ -6,10 +6,6 @@ import { createClient } from "@/lib/supabase/server";
 import { trackerUrl } from "@/lib/tracker";
 import { cn } from "@/lib/utils";
 
-// TODO(ssr-0.5.2): remove cast quando subir @supabase/ssr
-//                   pra ^0.10.2 (Fase 2.5)
-// Sintoma: from().select() retorna `never[]` em vez de Row[] tipado.
-type Membership = Tables<"memberships">;
 type Company = Tables<"companies">;
 type EventRow = Pick<
   Tables<"events">,
@@ -34,23 +30,21 @@ export default async function DashboardPage({
   const supabase = createClient();
 
   // Onboarding gate: sem membership = redireciona pra /onboarding.
-  const membershipsResult = await supabase
+  const { data: memberships } = await supabase
     .from("memberships")
     .select("*")
     .limit(1);
-  const memberships = membershipsResult.data as Membership[] | null;
 
   if (!memberships || memberships.length === 0) {
     redirect("/onboarding");
   }
 
   const membership = memberships[0]!;
-  const companyResult = await supabase
+  const { data: company } = await supabase
     .from("companies")
     .select("*")
     .eq("id", membership.company_id)
     .single();
-  const company = companyResult.data as Company | null;
 
   if (!company) {
     redirect("/onboarding");
@@ -65,12 +59,12 @@ export default async function DashboardPage({
   // INVOKER que faz aggregate server-side. Pra Zeus dogfood (~100s
   // eventos), pull-and-aggregate é mais simples e zero round-trips
   // extras.
-  const eventsResult = await supabase
+  const { data: eventsData } = await supabase
     .from("events")
     .select("created_at, device, ip_country, ip_city, referrer, lang")
     .eq("company_id", company.id)
     .order("created_at", { ascending: false });
-  const events = (eventsResult.data as EventRow[] | null) ?? [];
+  const events = eventsData ?? [];
 
   const stats = aggregateEvents(events);
   const recentEvents = events.slice(0, 10);

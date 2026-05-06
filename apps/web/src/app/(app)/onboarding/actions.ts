@@ -41,17 +41,13 @@ export async function createCompanyAction(
   const supabase = createClient();
 
   // CNPJ é null no MVP — preenchido depois em /configuracoes.
-  // TODO(ssr-0.5.2): remove cast quando subir @supabase/ssr
-  //                   pra ^0.10.2 (Fase 2.5)
-  // Sintoma: rpc() Args inferida como `undefined`. Validation já feita
-  // via Zod parse acima — `as never` é só pra calar o type checker.
   const { error } = await supabase.rpc("create_company", {
     _name: parsed.data.name,
     _slug: parsed.data.slug,
     _segment: parsed.data.segment,
     _size: parsed.data.size,
-    _cnpj: null,
-  } as never);
+    _cnpj: undefined,
+  });
 
   if (error) {
     // 42501 = unauthenticated (auth.uid() null check da RPC) ou permission denied
