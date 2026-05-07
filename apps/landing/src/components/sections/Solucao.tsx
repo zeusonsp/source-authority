@@ -40,7 +40,7 @@ export function Solucao() {
   return (
     <section
       id="solucao"
-      className="relative border-t border-border/60 py-24 md:py-32"
+      className="relative border-t border-border/60 py-24 md:py-32 scroll-mt-16"
     >
       {/* Acento dourado sutil no fundo da seção */}
       <div

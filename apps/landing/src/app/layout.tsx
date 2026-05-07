@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Manrope } from "next/font/google";
+import { Footer } from "@/components/footer";
+import { Header } from "@/components/header";
 import { cn } from "@/lib/utils";
 import "./globals.css";
 
@@ -34,7 +36,9 @@ export default function RootLayout({
   return (
     <html lang="pt-BR" className={cn(manrope.variable, "dark")}>
       <body className="min-h-screen bg-background font-sans text-foreground antialiased">
+        <Header />
         {children}
+        <Footer />
       </body>
     </html>
   );
