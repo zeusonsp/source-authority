@@ -32,7 +32,7 @@ const rows: Row[] = [
     linktree: "paywall",
     linktreeLabel: "Plano Pro",
     sourceAuthority: "yes",
-    sourceAuthorityLabel: "Todos planos",
+    sourceAuthorityLabel: "Growth, Pro e Business",
   },
   {
     feature: "Multi-tenant pra agências",
@@ -93,7 +93,7 @@ export function ComparativoLinktree() {
               <span className="text-muted-foreground">não tem.</span>
             </h2>
             <p className="mx-auto mt-5 max-w-xl text-balance text-base leading-relaxed text-muted-foreground">
-              Comparativo direto de features. Sem letras miúdas.
+              Comparativo direto. Veja onde Source Authority entrega mais.
             </p>
           </div>
         </Reveal>

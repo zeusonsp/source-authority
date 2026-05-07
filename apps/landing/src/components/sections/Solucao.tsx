@@ -30,7 +30,7 @@ const features = [
     body:
       "Domínio próprio (ou subdomínio Source Authority), design custom com sua paleta, sem watermark. Coerente com a marca premium que você construiu.",
     bullets: [
-      "Custom domain incluso em todos os planos",
+      "Custom domain a partir do Growth",
       "Tema configurável (cores, fonte, layout)",
       "Zero watermark, zero ads",
     ],
@@ -59,8 +59,8 @@ export function Solucao() {
               Entrega o que falta.
             </h2>
             <p className="mx-auto mt-5 max-w-xl text-balance text-base leading-relaxed text-muted-foreground md:text-lg">
-              Três pilares que substituem ferramentas genéricas com profundidade
-              de produto pensado pra empresas premium brasileiras.
+              Três pilares que substituem ferramentas genéricas com a
+              profundidade que marcas premium brasileiras precisam.
             </p>
           </div>
         </Reveal>

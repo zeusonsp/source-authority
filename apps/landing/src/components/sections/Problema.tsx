@@ -30,7 +30,7 @@ export function Problema() {
           <div className="mx-auto max-w-3xl text-center">
             <h2 className="text-balance text-4xl font-bold leading-[1.1] tracking-tight md:text-5xl">
               Você não sabe de onde vem seu tráfego.{" "}
-              <span className="text-muted-foreground">
+              <span className="font-medium">
                 Nem quem está copiando sua marca.
               </span>
             </h2>

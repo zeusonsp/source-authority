@@ -53,7 +53,7 @@ export function Hero() {
             por screenshot real (TODO no docblock acima). */}
         <div className="mx-auto mt-20 max-w-5xl">
           <div className="relative rounded-2xl border border-border bg-gradient-to-b from-card to-background p-2 shadow-[0_30px_80px_-20px_hsl(var(--accent)/0.15)]">
-            <div className="aspect-[16/10] w-full rounded-xl border border-border/60 bg-card/40">
+            <div className="aspect-[16/5] w-full rounded-xl border border-border/60 bg-card/40">
               <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
                 <span className="text-xs uppercase tracking-widest">
                   mockup
