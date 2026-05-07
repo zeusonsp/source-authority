@@ -106,6 +106,63 @@ export type Database = {
           },
         ]
       }
+      demo_leads: {
+        Row: {
+          company: string | null
+          created_at: string
+          email: string
+          employees: string
+          id: string
+          ip_address: string | null
+          name: string
+          phone: string | null
+          referrer: string | null
+          use_case: string | null
+          user_agent: string | null
+          utm_campaign: string | null
+          utm_content: string | null
+          utm_medium: string | null
+          utm_source: string | null
+          utm_term: string | null
+        }
+        Insert: {
+          company?: string | null
+          created_at?: string
+          email: string
+          employees: string
+          id?: string
+          ip_address?: string | null
+          name: string
+          phone?: string | null
+          referrer?: string | null
+          use_case?: string | null
+          user_agent?: string | null
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
+        }
+        Update: {
+          company?: string | null
+          created_at?: string
+          email?: string
+          employees?: string
+          id?: string
+          ip_address?: string | null
+          name?: string
+          phone?: string | null
+          referrer?: string | null
+          use_case?: string | null
+          user_agent?: string | null
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
+        }
+        Relationships: []
+      }
       events: {
         Row: {
           company_id: string
