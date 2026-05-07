@@ -1,0 +1,11 @@
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  reactStrictMode: true,
+  poweredByHeader: false,
+  transpilePackages: ["@source-authority/config", "@source-authority/shared"],
+  experimental: {
+    typedRoutes: true,
+  },
+};
+
+export default nextConfig;
