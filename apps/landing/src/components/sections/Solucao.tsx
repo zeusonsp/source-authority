@@ -1,4 +1,5 @@
 import { Globe2, Radar, Sparkles } from "lucide-react";
+import { Reveal } from "@/components/reveal";
 
 const features = [
   {
@@ -49,20 +50,23 @@ export function Solucao() {
       />
 
       <div className="container mx-auto px-6">
-        <div className="mx-auto max-w-3xl text-center">
-          <span className="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/5 px-3 py-1 text-xs font-medium uppercase tracking-wider text-accent">
-            Source Authority
-          </span>
-          <h2 className="mt-6 text-balance text-4xl font-bold leading-[1.1] tracking-tight md:text-5xl">
-            Entrega o que falta.
-          </h2>
-          <p className="mx-auto mt-5 max-w-xl text-balance text-base leading-relaxed text-muted-foreground md:text-lg">
-            Três pilares que substituem ferramentas genéricas com profundidade
-            de produto pensado pra empresas premium brasileiras.
-          </p>
-        </div>
+        <Reveal>
+          <div className="mx-auto max-w-3xl text-center">
+            <span className="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/5 px-3 py-1 text-xs font-medium uppercase tracking-wider text-accent">
+              Source Authority
+            </span>
+            <h2 className="mt-6 text-balance text-4xl font-bold leading-[1.1] tracking-tight md:text-5xl">
+              Entrega o que falta.
+            </h2>
+            <p className="mx-auto mt-5 max-w-xl text-balance text-base leading-relaxed text-muted-foreground md:text-lg">
+              Três pilares que substituem ferramentas genéricas com profundidade
+              de produto pensado pra empresas premium brasileiras.
+            </p>
+          </div>
+        </Reveal>
 
-        <div className="mx-auto mt-16 grid max-w-6xl grid-cols-1 gap-5 md:grid-cols-3">
+        <Reveal delay={0.1}>
+          <div className="mx-auto mt-16 grid max-w-6xl grid-cols-1 gap-5 md:grid-cols-3">
           {features.map((feature) => {
             const Icon = feature.icon;
             return (
@@ -96,7 +100,8 @@ export function Solucao() {
               </article>
             );
           })}
-        </div>
+          </div>
+        </Reveal>
       </div>
     </section>
   );

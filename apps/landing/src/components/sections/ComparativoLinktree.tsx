@@ -1,4 +1,5 @@
 import { Check, Lock, X } from "lucide-react";
+import { Reveal } from "@/components/reveal";
 
 type Cell = "yes" | "no" | "paywall";
 
@@ -85,17 +86,20 @@ export function ComparativoLinktree() {
   return (
     <section className="border-t border-border/60 py-24 md:py-32">
       <div className="container mx-auto px-6">
-        <div className="mx-auto max-w-3xl text-center">
-          <h2 className="text-balance text-4xl font-bold leading-[1.1] tracking-tight md:text-5xl">
-            O que Source Authority tem que Linktree{" "}
-            <span className="text-muted-foreground">não tem.</span>
-          </h2>
-          <p className="mx-auto mt-5 max-w-xl text-balance text-base leading-relaxed text-muted-foreground">
-            Comparativo direto de features. Sem letras miúdas.
-          </p>
-        </div>
+        <Reveal>
+          <div className="mx-auto max-w-3xl text-center">
+            <h2 className="text-balance text-4xl font-bold leading-[1.1] tracking-tight md:text-5xl">
+              O que Source Authority tem que Linktree{" "}
+              <span className="text-muted-foreground">não tem.</span>
+            </h2>
+            <p className="mx-auto mt-5 max-w-xl text-balance text-base leading-relaxed text-muted-foreground">
+              Comparativo direto de features. Sem letras miúdas.
+            </p>
+          </div>
+        </Reveal>
 
-        <div className="mx-auto mt-14 max-w-5xl overflow-hidden rounded-2xl border border-border bg-card/40">
+        <Reveal delay={0.1}>
+          <div className="mx-auto mt-14 max-w-5xl overflow-hidden rounded-2xl border border-border bg-card/40">
           <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 border-b border-border bg-secondary/30 px-6 py-4 text-xs font-medium uppercase tracking-wider text-muted-foreground sm:grid-cols-3 sm:gap-x-6 sm:px-8">
             <span>Feature</span>
             <span className="text-right sm:text-left">Linktree</span>
@@ -123,8 +127,9 @@ export function ComparativoLinktree() {
                 </span>
               </li>
             ))}
-          </ul>
-        </div>
+            </ul>
+          </div>
+        </Reveal>
       </div>
     </section>
   );

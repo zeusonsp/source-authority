@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Check } from "lucide-react";
+import { Reveal } from "@/components/reveal";
 import { buttonClasses } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -71,17 +72,22 @@ export function Pricing() {
       className="border-t border-border/60 py-24 md:py-32 scroll-mt-16"
     >
       <div className="container mx-auto px-6">
-        <div className="mx-auto max-w-3xl text-center">
-          <h2 className="text-balance text-4xl font-bold leading-[1.1] tracking-tight md:text-5xl">
-            Planos transparentes.{" "}
-            <span className="text-muted-foreground">Sem surpresa na fatura.</span>
-          </h2>
-          <p className="mx-auto mt-5 max-w-xl text-balance text-base leading-relaxed text-muted-foreground">
-            Pague pelo que usa. Upgrade ou downgrade a qualquer momento.
-          </p>
-        </div>
+        <Reveal>
+          <div className="mx-auto max-w-3xl text-center">
+            <h2 className="text-balance text-4xl font-bold leading-[1.1] tracking-tight md:text-5xl">
+              Planos transparentes.{" "}
+              <span className="text-muted-foreground">
+                Sem surpresa na fatura.
+              </span>
+            </h2>
+            <p className="mx-auto mt-5 max-w-xl text-balance text-base leading-relaxed text-muted-foreground">
+              Pague pelo que usa. Upgrade ou downgrade a qualquer momento.
+            </p>
+          </div>
+        </Reveal>
 
-        <div className="mx-auto mt-14 grid max-w-7xl grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <Reveal delay={0.1}>
+          <div className="mx-auto mt-14 grid max-w-7xl grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {plans.map((plan) => (
             <article
               key={plan.name}
@@ -140,19 +146,22 @@ export function Pricing() {
               </Link>
             </article>
           ))}
-        </div>
+          </div>
+        </Reveal>
 
-        <div className="mt-14 text-center">
+        <Reveal delay={0.2}>
+          <div className="mt-14 text-center">
           <Link
             href="/demo"
             className={buttonClasses({ variant: "primary", size: "lg" })}
           >
             Começar com 14 dias grátis
           </Link>
-          <p className="mt-3 text-xs text-muted-foreground">
-            Sem cartão de crédito. Cancele quando quiser.
-          </p>
-        </div>
+            <p className="mt-3 text-xs text-muted-foreground">
+              Sem cartão de crédito. Cancele quando quiser.
+            </p>
+          </div>
+        </Reveal>
       </div>
     </section>
   );

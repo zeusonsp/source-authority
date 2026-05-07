@@ -1,4 +1,5 @@
 import { AlertTriangle, EyeOff, ShieldOff } from "lucide-react";
+import { Reveal } from "@/components/reveal";
 
 const dores = [
   {
@@ -25,16 +26,19 @@ export function Problema() {
   return (
     <section className="border-t border-border/60 bg-background py-24 md:py-32">
       <div className="container mx-auto px-6">
-        <div className="mx-auto max-w-3xl text-center">
-          <h2 className="text-balance text-4xl font-bold leading-[1.1] tracking-tight md:text-5xl">
-            Você não sabe de onde vem seu tráfego.{" "}
-            <span className="text-muted-foreground">
-              Nem quem está copiando sua marca.
-            </span>
-          </h2>
-        </div>
+        <Reveal>
+          <div className="mx-auto max-w-3xl text-center">
+            <h2 className="text-balance text-4xl font-bold leading-[1.1] tracking-tight md:text-5xl">
+              Você não sabe de onde vem seu tráfego.{" "}
+              <span className="text-muted-foreground">
+                Nem quem está copiando sua marca.
+              </span>
+            </h2>
+          </div>
+        </Reveal>
 
-        <div className="mx-auto mt-16 grid max-w-6xl grid-cols-1 gap-4 md:grid-cols-3 md:gap-6">
+        <Reveal delay={0.1}>
+          <div className="mx-auto mt-16 grid max-w-6xl grid-cols-1 gap-4 md:grid-cols-3 md:gap-6">
           {dores.map((dor) => {
             const Icon = dor.icon;
             return (
@@ -54,7 +58,8 @@ export function Problema() {
               </article>
             );
           })}
-        </div>
+          </div>
+        </Reveal>
       </div>
     </section>
   );
