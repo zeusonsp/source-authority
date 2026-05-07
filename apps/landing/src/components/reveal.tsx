@@ -1,32 +1,52 @@
 "use client";
 
-import { motion, type Variants } from "framer-motion";
-import { type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  type ReactNode,
+} from "react";
+
+// useLayoutEffect log warnings em SSR. Em server retorna no-op
+// (useEffect); no client retorna o real (síncrono pré-paint).
+const useIsomorphicLayoutEffect =
+  typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 type RevealProps = {
   children: ReactNode;
+  /** Delay em segundos antes do animation. Default 0. */
   delay?: number;
   className?: string;
-  /** Distância inicial em px no eixo Y. Default 24. */
+  /** Distância em px do slide-up inicial. Default 24. */
   y?: number;
 };
 
-const VARIANTS: Variants = {
-  hidden: ({ y }: { y: number }) => ({ opacity: 0, y }),
-  visible: { opacity: 1, y: 0 },
-};
-
 /**
- * Wrapper Apple-like de fade+slide-up ao entrar no viewport.
+ * Reveal SSR-friendly com progressive enhancement via Web Animations API.
  *
- * Usa Intersection Observer interno do framer-motion (whileInView)
- * com `once: true` pra evitar animar repetidamente em scroll up/down.
- * Margin negativo no viewport antecipa o trigger antes de 100% no
- * frame, dando sensação de "já está aparecendo enquanto scroll".
+ * Estratégia em 3 fases:
  *
- * Curva de easing [0.22, 1, 0.36, 1] = "easeOutQuart"-ish, similar
- * à curva default de transições no Sketch/Figma — natural sem
- * exagero (anti-padrão Awwwards).
+ * 1. SSR / no-JS: <div> sem styles inline. Conteúdo SEMPRE acessível
+ *    pra crawlers, prévias de WhatsApp/LinkedIn, screenshot tools e
+ *    usuários com JS desabilitado.
+ *
+ * 2. Hydration + useLayoutEffect (síncrono, pré-paint):
+ *    - prefers-reduced-motion: reduce → no-op, conteúdo segue visível.
+ *    - Já dentro da viewport inicial → no-op (não anima o que usuário
+ *      não veria animar).
+ *    - Abaixo da dobra → seta inline `opacity:0` + `transform` antes
+ *      do primeiro paint pra não flickar.
+ *
+ * 3. IntersectionObserver dispara quando elemento entra no viewport
+ *    (margem de -80px pra antecipar) → Web Animations API anima de
+ *    hidden → visible. `fill: forwards` mantém o estado final.
+ *
+ * Vantagens vs framer-motion:
+ * - SSR HTML 100% limpo (zero inline opacity:0 no curl).
+ * - Bundle ~50 KB menor sem a dependência.
+ * - prefers-reduced-motion respeitado nativamente.
+ * - Zero React re-renders pra animar (Web Animations API é
+ *   imperativo, browser-native).
  */
 export function Reveal({
   children,
@@ -34,17 +54,62 @@ export function Reveal({
   className,
   y = 24,
 }: RevealProps) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useIsomorphicLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return;
+    }
+    const rect = el.getBoundingClientRect();
+    if (rect.top < window.innerHeight) return;
+    // Síncrono pré-paint: nenhum frame visível com conteúdo "pulando".
+    el.style.opacity = "0";
+    el.style.transform = `translateY(${y}px)`;
+  }, [y]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return;
+    }
+    // Pular setup do observer se layoutEffect não escondeu o elemento
+    // (caso "já visível na viewport inicial"). Sem trabalho a fazer.
+    if (el.style.opacity !== "0") return;
+
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          el.animate(
+            [
+              { opacity: 0, transform: `translateY(${y}px)` },
+              { opacity: 1, transform: "translateY(0)" },
+            ],
+            {
+              duration: 600,
+              delay: delay * 1000,
+              easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+              fill: "forwards",
+            },
+          );
+          io.disconnect();
+        }
+      },
+      { rootMargin: "0px 0px -80px 0px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [delay, y]);
+
   return (
-    <motion.div
-      initial="hidden"
-      whileInView="visible"
-      viewport={{ once: true, margin: "-80px" }}
-      custom={{ y }}
-      variants={VARIANTS}
-      transition={{ duration: 0.6, delay, ease: [0.22, 1, 0.36, 1] }}
-      className={className}
-    >
+    <div ref={ref} className={className}>
       {children}
-    </motion.div>
+    </div>
   );
 }
