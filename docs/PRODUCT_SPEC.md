@@ -147,7 +147,11 @@ Lista de detecções de uso indevido. Cada alerta exibe:
 
 - **Perfil**: dados da empresa, canais conectados (com status), trocar slug
 - **Plano**: plano atual, uso (cliques este mês / franquia), upgrade/downgrade
-- **Equipe**: convidar membros, permissões (admin/member/viewer)
+- **Equipe**: convidar membros, permissões em 4 níveis:
+  - **owner**: criador da empresa, único por empresa, pode tudo (incluindo deletar a empresa e transferir ownership)
+  - **admin**: pode editar dados da empresa, convidar e remover membros, gerenciar plano
+  - **member**: pode visualizar dashboards e relatórios, sem permissão de edição
+  - **viewer**: read-only do dashboard, não vê dados sensíveis (financeiro, equipe)
 
 ## Modelo de cobrança
 

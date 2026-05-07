@@ -92,6 +92,16 @@ Antes de cada tarefa significativa:
 - Adicionar dependências pesadas sem justificar
 - Otimizar performance prematuramente
 
+## Tech debt ativo
+
+Itens conhecidos que precisam ser endereçados em fase futura. Nenhum bloqueia o trabalho atual, mas devem ser revisados antes de declarar a fase encerrada.
+
+- **RPC `accept_invitation` + tabela `invitations`** (Fase 2.5/3): fluxo "owner convida por email → andre clica no link → vira member" não funciona com o schema atual (policy `memberships_insert_admin` exige caller admin). Resolução planejada: tabela `invitations` com token + RPC SECURITY DEFINER `accept_invitation`.
+- **Worker `tracker` — bounded await em vez de pure `ctx.waitUntil`** (Fase 3.5): `workers/tracker/src/index.ts` faz `ctx.waitUntil(insertPromise)` mas TAMBÉM `await Promise.race([insert, timeout(200ms)])` — redirect espera até 200ms se PostgREST estiver lento. Pattern canônico Cloudflare é só `ctx.waitUntil(insertPromise)` + return imediato (insert continua em background sem bloquear nada). Trocar reduz latência percebida em workers da Cloudflare. Detalhes em `feedback_cf_worker_waituntil_pattern.md`.
+- **Hardcode WhatsApp em `/configuracoes`** (Fase 7 ou quando 2º cliente entrar): `apps/web/src/app/(app)/configuracoes/configuracoes-form.tsx:26` define `WHATSAPP_NATHAN = "+55 11 94100-2149"` (número pessoal do Nathan), usado em 2 strings de UI ("alterar slug → fala pelo WhatsApp" e "alterar plano → fala pelo WhatsApp"). Resolução: mover pra env var `NEXT_PUBLIC_SUPPORT_WHATSAPP` ou tabela `support_channels` quando customer support virar processo, não bate-papo direto.
+- **Tracker base URL hardcoded** (rastreado desde 2026-05-06, Fase 4+): `apps/web/src/lib/tracker.ts:9` define `TRACKER_BASE_URL = "https://source-authority-tracker.zeusonsp.workers.dev"`. Bloqueia ambiente de staging e custom domain (oficial.sourceauthority.com.br). Resolução: trocar por env var `NEXT_PUBLIC_TRACKER_BASE_URL` quando tivermos staging/prod separados ou quando custom domain substituir o subdomínio .workers.dev.
+- **`segment` como text livre** (rastreado desde 2026-05-06, sem fase definida): `apps/web/src/lib/onboarding/schemas.ts` valida `segment` apenas como string trim 2-80 chars. Permite typos silenciosos ("Cosméticos" vs "cosmeticos" vs "cosmetica") e quebra agregação por vertical no futuro. Resolução: virar enum (Zod + DB CHECK) quando tivermos lista canônica de segmentos definida em produto.
+
 ## Quando travar — pergunte ao Nathan
 
 Sempre pergunte ao Nathan ANTES de:

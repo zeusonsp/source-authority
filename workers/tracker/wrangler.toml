@@ -1,0 +1,13 @@
+# source-authority-tracker — Worker do link mestre.
+#
+# Resolve oficial.sourceauthority.com.br/[slug] → 302 pra URL destino,
+# registrando o clique em events. MVP: hospedado no subdomínio gratuito
+# .workers.dev. Custom domain entra quando saírem da dogfood.
+
+name = "source-authority-tracker"
+main = "src/index.ts"
+compatibility_date = "2026-05-05"
+
+# Logs estruturados em produção via dashboard Cloudflare.
+[observability]
+enabled = true
