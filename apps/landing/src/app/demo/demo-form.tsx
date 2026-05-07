@@ -1,9 +1,10 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CheckCircle2, Loader2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
+import { submitDemoLead } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -20,9 +21,18 @@ type Props = {
   utm: UtmContext;
 };
 
+/**
+ * Honeypot field name. Renderizado invisível pra humano (off-screen +
+ * aria-hidden + tabindex=-1) mas presente no DOM pra bot scraper que
+ * preenche todo input. Server action rejeita se vier não-vazio.
+ */
+const HONEYPOT_FIELD = "website";
+
 export function DemoForm({ utm }: Props) {
   const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [referrer, setReferrer] = useState<string | undefined>();
+  const [honeypot, setHoneypot] = useState("");
 
   // document.referrer só está disponível no client. Captura no mount
   // pra incluir no payload (lead atribution).
@@ -62,19 +72,43 @@ export function DemoForm({ utm }: Props) {
   }
 
   async function onSubmit(data: DemoLeadInput) {
-    // Sub-bloco B2 vai trocar este console.log por server action que
-    // insere em supabase + notifica via Telegram/Resend.
-    const payload = {
+    setSubmitError(null);
+    const result = await submitDemoLead({
       ...data,
       ...utm,
       referrer,
-      submitted_at: new Date().toISOString(),
-    };
-    // eslint-disable-next-line no-console
-    console.log("[demo-form] payload:", payload);
-    // Simula latência de rede pra UX feel real.
-    await new Promise((r) => setTimeout(r, 500));
-    setSubmitted(true);
+      website: honeypot,
+    });
+
+    if (result.success) {
+      setSubmitted(true);
+      return;
+    }
+
+    // Honeypot: resposta genérica idêntica ao sucesso (não dá pista
+    // pro bot que detectamos). Marca submitted mesmo assim pra encerrar.
+    if (result.code === "honeypot") {
+      setSubmitted(true);
+      return;
+    }
+
+    if (result.code === "validation") {
+      // RHF já valida client-side; chegar aqui significa que client
+      // bypassou o resolver. Reporta primeira mensagem disponível.
+      const firstError =
+        Object.values(result.fieldErrors).find(
+          (errs): errs is string[] => Array.isArray(errs) && errs.length > 0,
+        )?.[0] ?? "Dados inválidos. Verifique os campos.";
+      setSubmitError(firstError);
+      return;
+    }
+
+    if (result.code === "rate_limited") {
+      setSubmitError(result.message);
+      return;
+    }
+
+    setSubmitError(result.message);
   }
 
   if (submitted) {
@@ -94,6 +128,34 @@ export function DemoForm({ utm }: Props) {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
+      {/*
+        Honeypot — invisível pra humano (off-screen + aria-hidden +
+        tabindex=-1 + autoComplete=off pra evitar password manager
+        preencher). Bot scraper típico preenche; humano não. Server
+        action rejeita silenciosamente se vier preenchido.
+      */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          left: "-9999px",
+          width: "1px",
+          height: "1px",
+          overflow: "hidden",
+        }}
+      >
+        <label htmlFor={HONEYPOT_FIELD}>Website (não preencha)</label>
+        <input
+          id={HONEYPOT_FIELD}
+          type="text"
+          name={HONEYPOT_FIELD}
+          tabIndex={-1}
+          autoComplete="off"
+          value={honeypot}
+          onChange={(e) => setHoneypot(e.target.value)}
+        />
+      </div>
+
       <Field
         id="name"
         label="Nome completo"
@@ -177,6 +239,16 @@ export function DemoForm({ utm }: Props) {
           {...register("use_case")}
         />
       </Field>
+
+      {submitError ? (
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2.5 text-sm text-destructive"
+        >
+          <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <span>{submitError}</span>
+        </div>
+      ) : null}
 
       <Button
         type="submit"
