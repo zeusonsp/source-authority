@@ -6,6 +6,7 @@ import {
   Hash,
   Loader2,
   Plus,
+  Search,
   Trash2,
   Unplug,
 } from "lucide-react";
@@ -18,6 +19,7 @@ import {
   addHashtag,
   disconnectInstagram,
   removeHashtag,
+  triggerHashtagScan,
 } from "./actions";
 
 type Connection = {
@@ -253,6 +255,10 @@ function HashtagsCard({
         </p>
       </div>
 
+      {canEdit && hashtags.length > 0 ? (
+        <TriggerScanButton />
+      ) : null}
+
       {error ? (
         <Alert variant="destructive" className="mt-3">
           <AlertCircle className="size-4" />
@@ -362,5 +368,69 @@ function HashtagItem({
         ) : null}
       </div>
     </li>
+  );
+}
+
+function TriggerScanButton() {
+  const [pending, startScan] = useTransition();
+  const [result, setResult] = useState<
+    | null
+    | { ok: true; watches: number; posts: number; alerts: number }
+    | { ok: false; message: string }
+  >(null);
+
+  function onClick() {
+    if (pending) return;
+    setResult(null);
+    startScan(async () => {
+      const r = await triggerHashtagScan();
+      if (r.ok) {
+        setResult({
+          ok: true,
+          watches: r.summary.watches,
+          posts: r.summary.posts_seen,
+          alerts: r.summary.alerts_created,
+        });
+      } else {
+        setResult({ ok: false, message: r.message });
+      }
+      setTimeout(() => setResult(null), 8000);
+    });
+  }
+
+  return (
+    <div className="mt-3 flex flex-col gap-2">
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        onClick={onClick}
+        disabled={pending}
+        className="self-start"
+      >
+        {pending ? (
+          <Loader2 className="size-4 animate-spin" />
+        ) : (
+          <Search className="size-4" />
+        )}
+        Disparar varredura agora
+      </Button>
+      {result?.ok ? (
+        <Alert className="border-emerald-400/40 bg-emerald-400/10 text-emerald-400">
+          <CheckCircle2 className="size-4" />
+          <AlertDescription>
+            Varredura concluída em {result.watches} hashtag(s):{" "}
+            {result.posts} posts analisados, {result.alerts} alerta(s)
+            criado(s).
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      {result && !result.ok ? (
+        <Alert variant="destructive">
+          <AlertCircle className="size-4" />
+          <AlertDescription>{result.message}</AlertDescription>
+        </Alert>
+      ) : null}
+    </div>
   );
 }
