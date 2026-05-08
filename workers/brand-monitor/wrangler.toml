@@ -1,0 +1,22 @@
+# source-authority-brand-monitor — Pilar 2: detecção de uso indevido de marca.
+#
+# Roda em 2 cron triggers:
+#   - */15 * * * *  (every 15min) — CT log poll via Cert Spotter API
+#   - 0 12 * * *    (12:00 UTC = 09:00 BRT) — digest diário de alertas
+#                                              medium/low das últimas 24h
+#
+# Insere em `alerts` via service_role (BYPASSRLS), envia notificações
+# via Resend pra owners+admins de cada empresa com alertas novos.
+#
+# MVP: hospedado em .workers.dev (sem custom domain). Logs no dashboard
+# Cloudflare via [observability].
+
+name = "source-authority-brand-monitor"
+main = "src/index.ts"
+compatibility_date = "2026-05-08"
+
+[observability]
+enabled = true
+
+[triggers]
+crons = ["*/15 * * * *", "0 12 * * *"]

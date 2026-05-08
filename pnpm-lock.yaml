@@ -212,6 +212,18 @@ importers:
         specifier: ^5.6.3
         version: 5.9.3
 
+  workers/brand-monitor:
+    devDependencies:
+      '@cloudflare/workers-types':
+        specifier: ^4.20240903.0
+        version: 4.20260505.1
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      wrangler:
+        specifier: ^3.78.0
+        version: 3.114.17(@cloudflare/workers-types@4.20260505.1)
+
   workers/tracker:
     devDependencies:
       '@cloudflare/workers-types':
