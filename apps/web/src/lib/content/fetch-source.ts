@@ -172,19 +172,26 @@ async function fetchOpenGraph(url: string): Promise<{
   // Cap HTML size pra evitar abuse.
   const text = (await res.text()).slice(0, 500_000);
 
-  // Regex tolera atributos em qualquer ordem (property antes/depois content)
-  // e também `name=` em vez de `property=` (alguns sites usam name).
+  // Regex tolerante a atributos extras (Instagram/React usam data-rh, etc)
+  // entre <meta e os attrs property/content. [^>]*? = qualquer char exceto
+  // > em modo lazy.
+  const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const keyEscaped = (k: string) => escapeRegex(k);
+
   const findMeta = (key: string): string | null => {
+    const k = keyEscaped(key);
+    // Caso 1: property/name antes de content.
     const propThenContent = text.match(
       new RegExp(
-        `<meta\\s+(?:property|name)=["']${key}["']\\s+content=["']([^"']+)["']`,
+        `<meta\\b[^>]*?(?:property|name)=["']${k}["'][^>]*?content=["']([^"']+)["']`,
         "i",
       ),
     );
     if (propThenContent) return propThenContent[1] ?? null;
+    // Caso 2: content antes de property/name.
     const contentThenProp = text.match(
       new RegExp(
-        `<meta\\s+content=["']([^"']+)["']\\s+(?:property|name)=["']${key}["']`,
+        `<meta\\b[^>]*?content=["']([^"']+)["'][^>]*?(?:property|name)=["']${k}["']`,
         "i",
       ),
     );
