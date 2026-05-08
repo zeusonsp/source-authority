@@ -161,7 +161,12 @@ async function notifyLead(payload: {
   const html = renderLeadEmail(payload);
 
   const result = await sendResendEmail({
-    from: "Source Authority <noreply@sourceauthority.com.br>",
+    // TODO(B3-followup): trocar pra noreply@sourceauthority.com.br
+    // quando Resend completar domain verification (status atual:
+    // DKIM verified + SPF pending — verify lento na Resend, ~30-60min
+    // após DNS propagar). Sandbox onboarding@resend.dev funciona em
+    // todo caso. Switch é 1 linha.
+    from: "Source Authority <onboarding@resend.dev>",
     to: env.LEADS_NOTIFICATION_EMAIL,
     subject,
     html,
