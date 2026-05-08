@@ -15,7 +15,10 @@ import "server-only";
  * isso no schema (max 30 watches per company).
  */
 
-const IG_GRAPH_BASE = "https://graph.instagram.com/v22.0";
+// Hashtag Search SÓ funciona em graph.facebook.com (Facebook Graph API
+// for Instagram), NÃO em graph.instagram.com (Instagram Direct API).
+// Usamos page_access_token obtido via Facebook Login flow.
+const IG_GRAPH_BASE = "https://graph.facebook.com/v22.0";
 
 export interface InstagramHashtagSearchResponse {
   data: { id: string }[];

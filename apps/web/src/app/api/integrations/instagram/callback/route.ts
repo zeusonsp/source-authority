@@ -5,8 +5,9 @@ import { NextResponse } from "next/server";
 import {
   exchangeCodeForToken,
   exchangeForLongLivedToken,
-  getInstagramUser,
+  getInstagramAccountForPage,
   isInstagramConfigured,
+  listUserPages,
 } from "@/lib/integrations/instagram";
 import { createClient } from "@/lib/supabase/server";
 import { env } from "@/lib/env";
@@ -14,16 +15,15 @@ import { env } from "@/lib/env";
 /**
  * GET /api/integrations/instagram/callback?code=X&state=Y
  *
- * Recebe redirect do Instagram Direct OAuth. Faz:
+ * Recebe redirect do Facebook OAuth dialog. Faz:
  *   1. Verifica CSRF state (cookie httpOnly)
- *   2. Troca code → short-lived token (1h)
- *   3. Troca short → long-lived (60d)
- *   4. Pega user info via /me (id, username, account_type)
- *   5. UPSERT instagram_connections
- *   6. Redireciona pra /configuracoes/instagram com flash
- *
- * Diferente do flow Facebook Login → não há listagem de Pages.
- * Conta IG Business autoriza diretamente, simplificando o callback.
+ *   2. Code → short-lived user token (1h)
+ *   3. Short → long-lived user token (60d)
+ *   4. Lista pages do user (/me/accounts)
+ *   5. Pra cada page: busca instagram_business_account
+ *   6. UPSERT instagram_connections com page_access_token (não user token —
+ *      é esse que o worker usa pra Graph API incluindo hashtag_search).
+ *   7. Redireciona pra /configuracoes/instagram com flash
  */
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -42,7 +42,6 @@ export async function GET(req: Request) {
   const error = url.searchParams.get("error");
   const errorReason = url.searchParams.get("error_reason");
 
-  // User cancelou no Instagram ou erro upstream.
   if (error) {
     const target = new URL("/configuracoes/instagram", env.NEXT_PUBLIC_APP_URL);
     target.searchParams.set("ig_error", errorReason ?? error);
@@ -56,7 +55,6 @@ export async function GET(req: Request) {
     );
   }
 
-  // CSRF check.
   const cookieStore = cookies();
   const expectedState = cookieStore.get("ig_oauth_state")?.value;
   if (!expectedState || expectedState !== state) {
@@ -64,7 +62,6 @@ export async function GET(req: Request) {
   }
   cookieStore.delete("ig_oauth_state");
 
-  // Auth: precisa estar logado.
   const supabase = createClient();
   const {
     data: { user },
@@ -73,7 +70,6 @@ export async function GET(req: Request) {
     return NextResponse.redirect(new URL("/login", env.NEXT_PUBLIC_APP_URL));
   }
 
-  // Resolve company.
   const { data: memberships } = await supabase
     .from("memberships")
     .select("company_id, role")
@@ -94,21 +90,54 @@ export async function GET(req: Request) {
   try {
     const shortLived = await exchangeCodeForToken(code, redirectUri);
     const longLived = await exchangeForLongLivedToken(shortLived.access_token);
-    const igUser = await getInstagramUser(longLived.access_token);
 
-    const expiresAt = new Date(Date.now() + longLived.expires_in * 1000);
+    const pages = await listUserPages(longLived.access_token);
+    let resolved: {
+      ig_user_id: string;
+      ig_username: string;
+      fb_page_id: string;
+      fb_page_name: string;
+      page_access_token: string;
+    } | null = null;
+
+    for (const page of pages) {
+      const ig = await getInstagramAccountForPage(page.id, page.access_token);
+      if (ig) {
+        resolved = {
+          ig_user_id: ig.ig_user_id,
+          ig_username: ig.username,
+          fb_page_id: page.id,
+          fb_page_name: page.name,
+          // Page tokens herdam expiração do user token long-lived (~60d) e
+          // são o token correto pra chamar Instagram Graph API por Page.
+          page_access_token: page.access_token,
+        };
+        break;
+      }
+    }
+
+    if (!resolved) {
+      return NextResponse.redirect(
+        new URL(
+          "/configuracoes/instagram?ig_error=no_business_account",
+          env.NEXT_PUBLIC_APP_URL,
+        ),
+      );
+    }
+
+    const expiresAt = new Date(
+      Date.now() + (longLived.expires_in ?? 5184000) * 1000,
+    );
     const { error: insertErr } = await supabase
       .from("instagram_connections")
       .upsert(
         {
           company_id: m.company_id,
-          ig_user_id: igUser.id,
-          ig_username: igUser.username,
-          // fb_page_id/fb_page_name ficam null no Instagram Direct flow
-          // (não há Page intermediária).
-          fb_page_id: null,
-          fb_page_name: null,
-          access_token: longLived.access_token,
+          ig_user_id: resolved.ig_user_id,
+          ig_username: resolved.ig_username,
+          fb_page_id: resolved.fb_page_id,
+          fb_page_name: resolved.fb_page_name,
+          access_token: resolved.page_access_token,
           token_expires_at: expiresAt.toISOString(),
           status: "active",
           connected_by: user.id,
