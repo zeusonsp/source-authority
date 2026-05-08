@@ -229,7 +229,7 @@ async function pollCompany(
 
     let issuances: CertspotterIssuance[];
     try {
-      issuances = await fetchCertspotterIssuances(normalizedTerm, cursor);
+      issuances = await fetchCertspotterIssuances(env, normalizedTerm, cursor);
     } catch (err) {
       console.error(
         `[brand-monitor] certspotter fetch failed company=${company.id} term="${normalizedTerm}":`,
@@ -478,6 +478,7 @@ async function dispatchCompanyDigest(
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function fetchCertspotterIssuances(
+  env: Env,
   term: string,
   cursor: string | null,
 ): Promise<CertspotterIssuance[]> {
@@ -494,6 +495,10 @@ async function fetchCertspotterIssuances(
     headers: {
       "User-Agent": CERTSPOTTER_UA,
       Accept: "application/json",
+      // Bearer auth dá rate limit muito mais alto que anonymous (Cert
+      // Spotter free tier: 100 monitored hostnames + ~75 req/h authed
+      // vs ~3 req/h anon). Sem o key, batemos rate limit em ~3 empresas.
+      Authorization: `Bearer ${env.CERTSPOTTER_API_KEY}`,
     },
   });
 
