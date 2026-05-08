@@ -3,95 +3,100 @@ import "server-only";
 import { env } from "@/lib/env-server";
 
 /**
- * Instagram Graph API — OAuth flow + helpers.
+ * Instagram Direct OAuth — Innovation #2 (Plano B).
  *
- * Fluxo:
- *  1. User click "Conectar Instagram" em /configuracoes/instagram
- *  2. Redirecionamos pra Facebook OAuth com escopos pra Instagram Business
- *  3. Facebook redireciona pra /api/integrations/instagram/callback?code=X
- *  4. Server troca `code` por short-lived access_token (1h)
- *  5. Troca short-lived por long-lived (60 dias)
- *  6. Lista pages, encontra Instagram Business Account ligada
- *  7. INSERT instagram_connections
+ * Trocamos Facebook Login for Business (que tinha problemas crônicos de
+ * domain whitelist) pelo Instagram Direct OAuth via api.instagram.com.
  *
- * Endpoints Graph API: usamos v22.0 (latest stable em 2026).
+ * Benefícios:
+ *   - Não exige app_domains complicado nem Valid OAuth Redirect URIs
+ *     no produto Facebook Login (que nem está instalado neste app).
+ *   - App ID separado (INSTAGRAM_APP_ID) com seu próprio Secret.
+ *   - Usuário autoriza diretamente conta IG Business — sem Facebook Page
+ *     intermediária na descoberta inicial.
+ *
+ * Trade-off: Hashtag Search API ainda precisa do flow FB→Page→IG
+ * eventualmente. Pra V2.1 (worker scanner de hashtags) talvez precisemos
+ * combinar os 2 flows. Por ora, conexão básica + descoberta funcionam.
+ *
+ * Endpoints (Instagram Graph API com Instagram Login):
+ *   - Auth dialog:  https://www.instagram.com/oauth/authorize
+ *   - Token short:  https://api.instagram.com/oauth/access_token
+ *   - Token long:   https://graph.instagram.com/access_token
+ *   - API base:     https://graph.instagram.com/v22.0
  */
 
-export const META_OAUTH_BASE = "https://www.facebook.com/v22.0/dialog/oauth";
-export const META_GRAPH_BASE = "https://graph.facebook.com/v22.0";
+export const IG_AUTH_URL = "https://www.instagram.com/oauth/authorize";
+export const IG_TOKEN_URL = "https://api.instagram.com/oauth/access_token";
+export const IG_LONG_LIVED_URL =
+  "https://graph.instagram.com/access_token";
+export const IG_GRAPH_BASE = "https://graph.instagram.com/v22.0";
 
-/**
- * Scope-based OAuth flow (legacy/universal). Funciona em qualquer app
- * que tenha permissions adicionadas via "Casos de uso → Personalizar
- * acesso ao Instagram". Mais robusto que config_id em apps recém-criados.
- */
-
-export const REQUIRED_SCOPES = [
-  "pages_show_list",
-  "pages_read_engagement",
-  "instagram_basic",
-  "business_management",
+// Permissões via Instagram OAuth direto (formato diferente do Facebook).
+export const IG_REQUIRED_SCOPES = [
+  "instagram_business_basic",
+  "instagram_business_content_publish",
+  "instagram_business_manage_messages",
+  "instagram_business_manage_comments",
 ] as const;
 
 export function isInstagramConfigured(): boolean {
-  return Boolean(env.META_APP_ID && env.META_APP_SECRET);
+  return Boolean(env.INSTAGRAM_APP_ID && env.INSTAGRAM_APP_SECRET);
 }
 
 export function buildAuthorizeUrl(state: string, redirectUri: string): string {
-  if (!env.META_APP_ID) throw new Error("META_APP_ID não configurado");
+  if (!env.INSTAGRAM_APP_ID)
+    throw new Error("INSTAGRAM_APP_ID não configurado");
   const params = new URLSearchParams({
-    client_id: env.META_APP_ID,
+    enable_fb_login: "0",
+    force_authentication: "1",
+    client_id: env.INSTAGRAM_APP_ID,
     redirect_uri: redirectUri,
     response_type: "code",
-    scope: REQUIRED_SCOPES.join(","),
+    scope: IG_REQUIRED_SCOPES.join(","),
     state,
   });
-  // Se config_id estiver setado, anexa também (Meta aceita ambos —
-  // alguns apps requerem o config_id).
-  if (env.META_LOGIN_CONFIG_ID) {
-    params.set("config_id", env.META_LOGIN_CONFIG_ID);
-  }
-  return `${META_OAUTH_BASE}?${params.toString()}`;
+  return `${IG_AUTH_URL}?${params.toString()}`;
 }
 
-/** Step 4: trade authorization code → short-lived access_token (1h). */
+/** Step 1: code → short-lived token (1 hora). */
 export async function exchangeCodeForToken(
   code: string,
   redirectUri: string,
-): Promise<{ access_token: string; token_type: string; expires_in: number }> {
-  if (!env.META_APP_ID || !env.META_APP_SECRET)
-    throw new Error("Meta credentials missing");
-  const params = new URLSearchParams({
-    client_id: env.META_APP_ID,
-    client_secret: env.META_APP_SECRET,
+): Promise<{ access_token: string; user_id: number; permissions?: string }> {
+  if (!env.INSTAGRAM_APP_ID || !env.INSTAGRAM_APP_SECRET)
+    throw new Error("Instagram credentials missing");
+  const body = new URLSearchParams({
+    client_id: env.INSTAGRAM_APP_ID,
+    client_secret: env.INSTAGRAM_APP_SECRET,
+    grant_type: "authorization_code",
     redirect_uri: redirectUri,
     code,
   });
-  const res = await fetch(
-    `${META_GRAPH_BASE}/oauth/access_token?${params.toString()}`,
-  );
+  const res = await fetch(IG_TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: body.toString(),
+  });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`exchange code failed ${res.status}: ${text}`);
+    throw new Error(`exchangeCode failed ${res.status}: ${text}`);
   }
   return res.json();
 }
 
-/** Step 5: short-lived → long-lived (60 days). */
+/** Step 2: short-lived → long-lived (60 days). */
 export async function exchangeForLongLivedToken(
   shortLivedToken: string,
 ): Promise<{ access_token: string; token_type: string; expires_in: number }> {
-  if (!env.META_APP_ID || !env.META_APP_SECRET)
-    throw new Error("Meta credentials missing");
+  if (!env.INSTAGRAM_APP_SECRET)
+    throw new Error("INSTAGRAM_APP_SECRET missing");
   const params = new URLSearchParams({
-    grant_type: "fb_exchange_token",
-    client_id: env.META_APP_ID,
-    client_secret: env.META_APP_SECRET,
-    fb_exchange_token: shortLivedToken,
+    grant_type: "ig_exchange_token",
+    client_secret: env.INSTAGRAM_APP_SECRET,
+    access_token: shortLivedToken,
   });
-  const res = await fetch(
-    `${META_GRAPH_BASE}/oauth/access_token?${params.toString()}`,
-  );
+  const res = await fetch(`${IG_LONG_LIVED_URL}?${params.toString()}`);
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`long-lived exchange failed ${res.status}: ${text}`);
@@ -99,91 +104,22 @@ export async function exchangeForLongLivedToken(
   return res.json();
 }
 
-/** Step 6a: lista pages do user logado. */
-export async function listUserPages(accessToken: string): Promise<
-  Array<{ id: string; name: string; access_token: string }>
-> {
-  const res = await fetch(
-    `${META_GRAPH_BASE}/me/accounts?fields=id,name,access_token&access_token=${accessToken}`,
-  );
-  if (!res.ok) throw new Error(`listUserPages ${res.status}`);
-  const data = (await res.json()) as {
-    data: Array<{ id: string; name: string; access_token: string }>;
-  };
-  return data.data ?? [];
-}
-
-/** Step 6b: pra cada page, busca Instagram Business Account ligada. */
-export async function getInstagramAccountForPage(
-  pageId: string,
-  pageAccessToken: string,
-): Promise<{ ig_user_id: string; username: string } | null> {
-  const res = await fetch(
-    `${META_GRAPH_BASE}/${pageId}?fields=instagram_business_account{id,username}&access_token=${pageAccessToken}`,
-  );
-  if (!res.ok) return null;
-  const data = (await res.json()) as {
-    instagram_business_account?: { id: string; username: string };
-  };
-  if (!data.instagram_business_account) return null;
-  return {
-    ig_user_id: data.instagram_business_account.id,
-    username: data.instagram_business_account.username,
-  };
-}
-
-/** Resolve hashtag string → IG hashtag_id (cacheable). */
-export async function resolveHashtagId(
-  hashtag: string,
-  igUserId: string,
+/** Get user info: username + business account info. */
+export async function getInstagramUser(
   accessToken: string,
-): Promise<string | null> {
-  const params = new URLSearchParams({
-    user_id: igUserId,
-    q: hashtag.replace(/^#/, ""),
-    access_token: accessToken,
-  });
-  const res = await fetch(
-    `${META_GRAPH_BASE}/ig_hashtag_search?${params.toString()}`,
-  );
-  if (!res.ok) return null;
-  const data = (await res.json()) as { data?: Array<{ id: string }> };
-  return data.data?.[0]?.id ?? null;
-}
-
-/** Top media for hashtag — usado pelo worker scanner. */
-export async function getTopMediaForHashtag(
-  hashtagId: string,
-  igUserId: string,
-  accessToken: string,
-  limit = 50,
-): Promise<Array<{
+): Promise<{
   id: string;
-  caption?: string;
-  media_url?: string;
-  permalink: string;
-  timestamp: string;
-  username?: string;
-}>> {
+  username: string;
+  account_type?: string;
+  media_count?: number;
+}> {
   const params = new URLSearchParams({
-    user_id: igUserId,
-    fields: "id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,username",
-    limit: String(limit),
+    fields: "id,username,account_type,media_count",
     access_token: accessToken,
   });
-  const res = await fetch(
-    `${META_GRAPH_BASE}/${hashtagId}/top_media?${params.toString()}`,
-  );
+  const res = await fetch(`${IG_GRAPH_BASE}/me?${params.toString()}`);
   if (!res.ok) {
-    throw new Error(`getTopMedia ${res.status}: ${await res.text()}`);
+    throw new Error(`getInstagramUser ${res.status}: ${await res.text()}`);
   }
-  const data = (await res.json()) as { data: Array<Record<string, unknown>> };
-  return (data.data ?? []) as Array<{
-    id: string;
-    caption?: string;
-    media_url?: string;
-    permalink: string;
-    timestamp: string;
-    username?: string;
-  }>;
+  return res.json();
 }

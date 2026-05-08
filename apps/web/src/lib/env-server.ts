@@ -29,6 +29,12 @@ const serverEnvSchema = z.object({
   // Configuration ID do "Login do Facebook para Empresas" criado no Meta.
   // OAuth novo flow usa config_id em vez de scope na URL.
   META_LOGIN_CONFIG_ID: z.string().optional(),
+  // Instagram Direct OAuth (api.instagram.com flow). App separado dentro
+  // do mesmo Meta dashboard com seu próprio ID + Secret.
+  // Mais simples e robusto que Facebook Login para Empresas — não exige
+  // Page intermediária e pula validações dos app_domains.
+  INSTAGRAM_APP_ID: z.string().optional(),
+  INSTAGRAM_APP_SECRET: z.string().optional(),
   // Shared secret pra autenticar requests do workers/brand-monitor pros
   // endpoints internos /api/internal/alerts/notify e /digest. Bearer header.
   // Gere com `openssl rand -hex 32` (32 bytes = 64 hex chars). Mesmo valor
@@ -56,6 +62,8 @@ const parsed = serverEnvSchema.safeParse({
   META_APP_ID: process.env.META_APP_ID,
   META_APP_SECRET: process.env.META_APP_SECRET,
   META_LOGIN_CONFIG_ID: process.env.META_LOGIN_CONFIG_ID,
+  INSTAGRAM_APP_ID: process.env.INSTAGRAM_APP_ID,
+  INSTAGRAM_APP_SECRET: process.env.INSTAGRAM_APP_SECRET,
   INTERNAL_NOTIFICATIONS_SECRET: process.env.INTERNAL_NOTIFICATIONS_SECRET,
   STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
   STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
