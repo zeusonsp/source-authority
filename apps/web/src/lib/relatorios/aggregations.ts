@@ -101,9 +101,24 @@ export function aggregate(
   const referrerCodeMap = new Map<string, number>();
   let referrerCodeTotal = 0;
 
+  // Tier 2 — heatmap 7×24 (dow × hour) em BRT (UTC-3, sem DST desde 2019).
+  // Inicializa zerado pra zero-fill ao retornar.
+  const heatmap: number[][] = Array.from({ length: 7 }, () =>
+    Array.from({ length: 24 }, () => 0),
+  );
+  let heatmapPeak = 0;
+
   for (const e of events) {
     total++;
     const ts = new Date(e.created_at).getTime();
+    // Heatmap: shift UTC → BRT subtraindo 3h, depois getUTC* dá componentes BRT.
+    const brt = new Date(ts - 3 * 60 * 60 * 1000);
+    const dow = brt.getUTCDay(); // 0=Dom..6=Sáb
+    const hour = brt.getUTCHours(); // 0..23
+    const cell = (heatmap[dow]![hour] ?? 0) + 1;
+    heatmap[dow]![hour] = cell;
+    if (cell > heatmapPeak) heatmapPeak = cell;
+    // (continua o loop original)
     if (now - ts <= MS_DAY) last24h++;
     if (e.ip_country) countriesSet.add(e.ip_country);
 
@@ -202,6 +217,8 @@ export function aggregate(
       salesByCode,
     ),
     kpisPrevious: null,
+    heatmap,
+    heatmapPeak,
   };
 }
 

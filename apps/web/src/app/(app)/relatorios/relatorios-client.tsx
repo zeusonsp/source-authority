@@ -69,6 +69,10 @@ export function RelatoriosClient({ data }: Props) {
           <KpiGrid kpis={data.kpis} kpisPrevious={data.kpisPrevious} />
           <HourlyChart data={data.hourly} />
           <DailyChart data={data.daily} />
+          <HeatmapCard
+            matrix={data.heatmap}
+            peak={data.heatmapPeak}
+          />
           {data.kpis.conversions > 0 ? (
             <RevenueChart data={data.dailyRevenue} />
           ) : null}
@@ -637,6 +641,121 @@ function BreakdownsRow({
         total={total}
         emptyText="Sem dados de origem."
       />
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Heatmap dia × hora (Tier 2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const DOW_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+const HOUR_TICKS = [0, 6, 12, 18];
+
+function HeatmapCard({
+  matrix,
+  peak,
+}: {
+  matrix: number[][];
+  peak: number;
+}) {
+  // Encontra o pico (dow, hour) pra label "vendo mais às 21h domingo".
+  let peakDow = 0;
+  let peakHour = 0;
+  let total = 0;
+  for (let d = 0; d < 7; d++) {
+    for (let h = 0; h < 24; h++) {
+      const v = matrix[d]?.[h] ?? 0;
+      total += v;
+      if (v === peak && peak > 0) {
+        peakDow = d;
+        peakHour = h;
+      }
+    }
+  }
+
+  return (
+    <section className="rounded-lg border border-border bg-card p-4">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          Padrão semanal · dia × hora
+        </h2>
+        {peak > 0 ? (
+          <p className="text-xs text-muted-foreground">
+            Pico:{" "}
+            <span className="text-accent">
+              {DOW_LABELS[peakDow]} às {String(peakHour).padStart(2, "0")}h
+            </span>{" "}
+            ({peak} {peak === 1 ? "click" : "clicks"})
+          </p>
+        ) : null}
+      </div>
+      {total === 0 ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">
+          Sem dados de tráfego no período pra montar o heatmap.
+        </p>
+      ) : (
+        <div>
+          {/* Hour ticks no topo */}
+          <div className="grid grid-cols-[40px_repeat(24,minmax(0,1fr))] gap-[2px] pb-1">
+            <div />
+            {Array.from({ length: 24 }, (_, h) => (
+              <div
+                key={h}
+                className="text-center text-[9px] text-muted-foreground"
+              >
+                {HOUR_TICKS.includes(h) ? String(h).padStart(2, "0") : ""}
+              </div>
+            ))}
+          </div>
+          {DOW_LABELS.map((dowLabel, d) => (
+            <div
+              key={d}
+              className="grid grid-cols-[40px_repeat(24,minmax(0,1fr))] gap-[2px] py-[1px]"
+            >
+              <div className="flex items-center text-[10px] text-muted-foreground">
+                {dowLabel}
+              </div>
+              {Array.from({ length: 24 }, (_, h) => {
+                const v = matrix[d]?.[h] ?? 0;
+                const intensity = peak > 0 ? v / peak : 0;
+                return (
+                  <div
+                    key={h}
+                    title={`${dowLabel} ${String(h).padStart(2, "0")}h — ${v} ${
+                      v === 1 ? "click" : "clicks"
+                    }`}
+                    className="aspect-square rounded-[2px] border border-border/60"
+                    style={{
+                      backgroundColor:
+                        intensity === 0
+                          ? "transparent"
+                          : `rgba(201, 169, 75, ${0.15 + intensity * 0.85})`,
+                    }}
+                  />
+                );
+              })}
+            </div>
+          ))}
+          <div className="mt-3 flex items-center justify-end gap-2 text-[10px] text-muted-foreground">
+            <span>menos</span>
+            <div className="flex gap-[2px]">
+              {[0.15, 0.35, 0.55, 0.75, 1].map((a) => (
+                <div
+                  key={a}
+                  className="h-3 w-3 rounded-[2px] border border-border/60"
+                  style={{ backgroundColor: `rgba(201, 169, 75, ${a})` }}
+                />
+              ))}
+            </div>
+            <span>mais</span>
+          </div>
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            Horário de Brasília. Hover sobre cada célula pra ver o número
+            exato.
+          </p>
+        </div>
+      )}
     </section>
   );
 }
