@@ -297,43 +297,106 @@ export type Database = {
       }
       events: {
         Row: {
+          color_depth: number | null
           company_id: string
           created_at: string
           device: string | null
+          device_pixel_ratio: number | null
           id: string
+          ip_asn: number | null
           ip_city: string | null
+          ip_continent: string | null
           ip_country: string | null
+          ip_latitude: number | null
+          ip_longitude: number | null
+          ip_organization: string | null
+          ip_postal_code: string | null
+          ip_region: string | null
+          ip_timezone: string | null
           lang: string | null
+          network_type: string | null
           referrer: string | null
           referrer_code: string | null
+          screen_height: number | null
+          screen_width: number | null
           session_id: string | null
+          url_path: string | null
           user_agent: string | null
+          utm_campaign: string | null
+          utm_content: string | null
+          utm_medium: string | null
+          utm_source: string | null
+          utm_term: string | null
+          viewport_height: number | null
+          viewport_width: number | null
         }
         Insert: {
+          color_depth?: number | null
           company_id: string
           created_at?: string
           device?: string | null
+          device_pixel_ratio?: number | null
           id?: string
+          ip_asn?: number | null
           ip_city?: string | null
+          ip_continent?: string | null
           ip_country?: string | null
+          ip_latitude?: number | null
+          ip_longitude?: number | null
+          ip_organization?: string | null
+          ip_postal_code?: string | null
+          ip_region?: string | null
+          ip_timezone?: string | null
           lang?: string | null
+          network_type?: string | null
           referrer?: string | null
           referrer_code?: string | null
+          screen_height?: number | null
+          screen_width?: number | null
           session_id?: string | null
+          url_path?: string | null
           user_agent?: string | null
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
+          viewport_height?: number | null
+          viewport_width?: number | null
         }
         Update: {
+          color_depth?: number | null
           company_id?: string
           created_at?: string
           device?: string | null
+          device_pixel_ratio?: number | null
           id?: string
+          ip_asn?: number | null
           ip_city?: string | null
+          ip_continent?: string | null
           ip_country?: string | null
+          ip_latitude?: number | null
+          ip_longitude?: number | null
+          ip_organization?: string | null
+          ip_postal_code?: string | null
+          ip_region?: string | null
+          ip_timezone?: string | null
           lang?: string | null
+          network_type?: string | null
           referrer?: string | null
           referrer_code?: string | null
+          screen_height?: number | null
+          screen_width?: number | null
           session_id?: string | null
+          url_path?: string | null
           user_agent?: string | null
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
+          viewport_height?: number | null
+          viewport_width?: number | null
         }
         Relationships: [
           {

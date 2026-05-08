@@ -118,9 +118,35 @@
       ref = new URL(window.location.href).searchParams.get("ref");
     } catch (e) {}
 
+    // Browser/device enrichment.
+    var sw = window.screen || {};
+    var conn =
+      navigator.connection ||
+      navigator.mozConnection ||
+      navigator.webkitConnection ||
+      null;
+
+    // UTM params parsing — padrão Google Analytics.
+    var utm = {};
+    try {
+      var u = new URL(window.location.href);
+      utm.source = u.searchParams.get("utm_source");
+      utm.medium = u.searchParams.get("utm_medium");
+      utm.campaign = u.searchParams.get("utm_campaign");
+      utm.term = u.searchParams.get("utm_term");
+      utm.content = u.searchParams.get("utm_content");
+    } catch (e) {}
+
     var pv = {
       slug: slug,
       url: window.location.href,
+      url_path: (function () {
+        try {
+          return new URL(window.location.href).pathname || null;
+        } catch (e) {
+          return null;
+        }
+      })(),
       referrer: document.referrer || null,
       ref: ref,
       lang:
@@ -129,6 +155,23 @@
         navigator.browserLanguage ||
         null,
       session_id: sessionId,
+      // Screen/viewport.
+      screen_width: typeof sw.width === "number" ? sw.width : null,
+      screen_height: typeof sw.height === "number" ? sw.height : null,
+      viewport_width: window.innerWidth || null,
+      viewport_height: window.innerHeight || null,
+      color_depth: typeof sw.colorDepth === "number" ? sw.colorDepth : null,
+      device_pixel_ratio:
+        typeof window.devicePixelRatio === "number"
+          ? Math.round(window.devicePixelRatio * 100) / 100
+          : null,
+      network_type: conn && typeof conn.effectiveType === "string" ? conn.effectiveType : null,
+      // UTM
+      utm_source: utm.source || null,
+      utm_medium: utm.medium || null,
+      utm_campaign: utm.campaign || null,
+      utm_term: utm.term || null,
+      utm_content: utm.content || null,
     };
 
     sendBeacon(endpoint + "/api/pixel", pv);

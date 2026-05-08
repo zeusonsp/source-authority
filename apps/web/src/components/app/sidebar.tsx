@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   Link2,
   Settings,
+  Stethoscope,
   Users,
   X,
   type LucideIcon,
@@ -51,6 +52,12 @@ const NAV_ITEMS: readonly NavItem[] = [
     href: "/revendedores",
     label: "Revendedores",
     icon: Users,
+    badge: null,
+  },
+  {
+    href: "/diagnostico",
+    label: "Diagnóstico",
+    icon: Stethoscope,
     badge: null,
   },
   {
