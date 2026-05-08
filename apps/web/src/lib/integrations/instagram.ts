@@ -46,9 +46,16 @@ export function buildAuthorizeUrl(state: string, redirectUri: string): string {
     client_id: env.META_APP_ID,
     redirect_uri: redirectUri,
     response_type: "code",
-    scope: REQUIRED_SCOPES.join(","),
     state,
   });
+  // Facebook Login for Business: usar config_id em vez de scope= quando
+  // disponível (mais robusto, menos prone a "scope_invalid"). Configurações
+  // pré-criadas no Meta dashboard com permissões aprovadas.
+  if (env.META_LOGIN_CONFIG_ID) {
+    params.set("config_id", env.META_LOGIN_CONFIG_ID);
+  } else {
+    params.set("scope", REQUIRED_SCOPES.join(","));
+  }
   return `${META_OAUTH_DIALOG}?${params.toString()}`;
 }
 
