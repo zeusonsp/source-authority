@@ -29,12 +29,8 @@ export function Footer() {
             <ul className="mt-3 space-y-2">
               {LEGAL_LINKS.map((link) => (
                 <li key={link.href}>
-                  {/*
-                    Páginas de Termos/Privacidade/LGPD entram no Lote C.
-                    Por enquanto links 404 (placeholder explícito).
-                  */}
                   <Link
-                    href={link.href as never}
+                    href={link.href}
                     className="text-sm text-muted-foreground transition-colors hover:text-foreground"
                   >
                     {link.label}
