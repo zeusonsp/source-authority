@@ -38,7 +38,7 @@ const NAV_ITEMS: readonly NavItem[] = [
     href: "/alertas",
     label: "Alertas",
     icon: Bell,
-    badge: "Fase 5",
+    badge: null,
   },
   {
     href: "/relatorios",
