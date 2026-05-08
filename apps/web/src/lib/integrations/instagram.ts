@@ -20,26 +20,27 @@ import { env } from "@/lib/env-server";
 export const META_OAUTH_BASE = "https://www.facebook.com/v22.0/dialog/oauth";
 export const META_GRAPH_BASE = "https://graph.facebook.com/v22.0";
 
-// Scopes mínimos pra Instagram Business + Pages connection.
-export const REQUIRED_SCOPES = [
-  "pages_show_list",
-  "pages_read_engagement",
-  "instagram_basic",
-  "instagram_manage_insights",
-  "business_management",
-] as const;
+/**
+ * Login do Facebook para Empresas usa `config_id` (referência à
+ * Login Configuration criada no Meta dashboard) em vez de `scope=`.
+ * As permissões são definidas dentro da config no Meta, não na URL.
+ */
 
 export function isInstagramConfigured(): boolean {
-  return Boolean(env.META_APP_ID && env.META_APP_SECRET);
+  return Boolean(
+    env.META_APP_ID && env.META_APP_SECRET && env.META_LOGIN_CONFIG_ID,
+  );
 }
 
 export function buildAuthorizeUrl(state: string, redirectUri: string): string {
   if (!env.META_APP_ID) throw new Error("META_APP_ID não configurado");
+  if (!env.META_LOGIN_CONFIG_ID)
+    throw new Error("META_LOGIN_CONFIG_ID não configurado");
   const params = new URLSearchParams({
     client_id: env.META_APP_ID,
     redirect_uri: redirectUri,
     response_type: "code",
-    scope: REQUIRED_SCOPES.join(","),
+    config_id: env.META_LOGIN_CONFIG_ID,
     state,
   });
   return `${META_OAUTH_BASE}?${params.toString()}`;
