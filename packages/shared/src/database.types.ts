@@ -14,6 +14,60 @@ export type Database = {
   }
   public: {
     Tables: {
+      alerts: {
+        Row: {
+          company_id: string
+          created_at: string
+          data: Json
+          id: string
+          severity: string
+          source: string
+          status: string
+          triaged_at: string | null
+          triaged_by: string | null
+          type: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          data?: Json
+          id?: string
+          severity?: string
+          source: string
+          status?: string
+          triaged_at?: string | null
+          triaged_by?: string | null
+          type: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          data?: Json
+          id?: string
+          severity?: string
+          source?: string
+          status?: string
+          triaged_at?: string | null
+          triaged_by?: string | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alerts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "alerts_triaged_by_fkey"
+            columns: ["triaged_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_log: {
         Row: {
           action: string
@@ -64,7 +118,9 @@ export type Database = {
           default_redirect_url: string | null
           id: string
           name: string
+          owned_domains: string[]
           plan: string
+          protected_brand_terms: string[]
           segment: string | null
           size: string | null
           slug: string
@@ -77,7 +133,9 @@ export type Database = {
           default_redirect_url?: string | null
           id?: string
           name: string
+          owned_domains?: string[]
           plan?: string
+          protected_brand_terms?: string[]
           segment?: string | null
           size?: string | null
           slug: string
@@ -90,7 +148,9 @@ export type Database = {
           default_redirect_url?: string | null
           id?: string
           name?: string
+          owned_domains?: string[]
           plan?: string
+          protected_brand_terms?: string[]
           segment?: string | null
           size?: string | null
           slug?: string
@@ -303,6 +363,10 @@ export type Database = {
       is_slug_available: { Args: { _slug: string }; Returns: boolean }
       log_audit_event: {
         Args: { _action: string; _company_id: string; _payload?: Json }
+        Returns: string
+      }
+      triage_alert: {
+        Args: { _alert_id: string; _new_status: string; _note?: string }
         Returns: string
       }
       update_company: {
