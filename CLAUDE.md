@@ -96,30 +96,3 @@ Antes de cada tarefa significativa:
 
 Itens conhecidos que precisam ser endereçados em fase futura. Nenhum bloqueia o trabalho atual, mas devem ser revisados antes de declarar a fase encerrada.
 
-- **`/forgot-password` é placeholder** (rastreado desde 2026-05-08, B3.7+): `apps/web/src/app/(auth)/forgot-password/page.tsx` mostra "Em breve. Entre em contato com o suporte." — não tem fluxo real. Hoje único caminho de reset é admin API (service_role) ou suporte humano. Implementação simples agora que Supabase Auth SMTP via Resend está configurado: server action chamando `supabase.auth.resetPasswordForEmail()` com `redirectTo: ${origin}/auth/reset-password` + página `/auth/reset-password` que recebe token e chama `supabase.auth.updateUser({password})`. Total: ~80 linhas + 2 commits.
-- **RPC `accept_invitation` + tabela `invitations`** (Fase 2.5/3): fluxo "owner convida por email → andre clica no link → vira member" não funciona com o schema atual (policy `memberships_insert_admin` exige caller admin). Resolução planejada: tabela `invitations` com token + RPC SECURITY DEFINER `accept_invitation`.
-- **Worker `tracker` — bounded await em vez de pure `ctx.waitUntil`** (Fase 3.5): `workers/tracker/src/index.ts` faz `ctx.waitUntil(insertPromise)` mas TAMBÉM `await Promise.race([insert, timeout(200ms)])` — redirect espera até 200ms se PostgREST estiver lento. Pattern canônico Cloudflare é só `ctx.waitUntil(insertPromise)` + return imediato (insert continua em background sem bloquear nada). Trocar reduz latência percebida em workers da Cloudflare. Detalhes em `feedback_cf_worker_waituntil_pattern.md`.
-- **Hardcode WhatsApp em `/configuracoes`** (Fase 7 ou quando 2º cliente entrar): `apps/web/src/app/(app)/configuracoes/configuracoes-form.tsx:26` define `WHATSAPP_NATHAN = "+55 11 94100-2149"` (número pessoal do Nathan), usado em 2 strings de UI ("alterar slug → fala pelo WhatsApp" e "alterar plano → fala pelo WhatsApp"). Resolução: mover pra env var `NEXT_PUBLIC_SUPPORT_WHATSAPP` ou tabela `support_channels` quando customer support virar processo, não bate-papo direto.
-- **Tracker base URL hardcoded** (rastreado desde 2026-05-06, Fase 4+): `apps/web/src/lib/tracker.ts:9` define `TRACKER_BASE_URL = "https://source-authority-tracker.zeusonsp.workers.dev"`. Bloqueia ambiente de staging e custom domain (oficial.sourceauthority.com.br). Resolução: trocar por env var `NEXT_PUBLIC_TRACKER_BASE_URL` quando tivermos staging/prod separados ou quando custom domain substituir o subdomínio .workers.dev.
-- **`segment` como text livre** (rastreado desde 2026-05-06, sem fase definida): `apps/web/src/lib/onboarding/schemas.ts` valida `segment` apenas como string trim 2-80 chars. Permite typos silenciosos ("Cosméticos" vs "cosmeticos" vs "cosmetica") e quebra agregação por vertical no futuro. Resolução: virar enum (Zod + DB CHECK) quando tivermos lista canônica de segmentos definida em produto.
-- **Notificação Telegram pulada no B2** (rastreado desde 2026-05-07, sub-bloco futuro): server action `submitDemoLead` em `apps/landing/src/app/demo/actions.ts` usa só Resend pra notificar lead novo. A função `notifyLead()` está isolada exatamente pra plugar canais adicionais sem refactor — quando re-introduzir Telegram, basta criar `lib/notifications/telegram.ts`, adicionar `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` em `env-server.ts`, e trocar o `await sendResendEmail(...)` por `await Promise.allSettled([sendResendEmail(...), sendTelegramMessage(...)])` dentro de `notifyLead()`. Decisão tomada por Nathan no início do B2 pra reduzir setup interativo.
-- **Design system fragmentado entre `apps/web` e `apps/landing`** (rastreado desde 2026-05-07, Lote B+): `apps/landing/src/components/ui/` tem componentes custom em Tailwind puro (Button, Input, Textarea, Select) escritos do zero pra estética Apple-like de marketing. `apps/web/src/components/ui/` mantém shadcn local com Radix primitives (alert, button, input, label) pra dashboard. Tokens visuais já são compartilhados via `@source-authority/config/tailwind` preset. Consequência: divergência de comportamento (ex: focus rings, padding scale) entre marketing e dashboard. Resolução: extrair pra `packages/ui` quando ROI claro aparecer (ex: 3+ apps consumindo, ou inconsistência visual virar bug reportado). Não criar abstração premature.
-
-## Quando travar — pergunte ao Nathan
-
-Sempre pergunte ao Nathan ANTES de:
-
-- Mudar de stack ou de fornecedor (Supabase → Firebase, etc.)
-- Adicionar custo recorrente novo (qualquer SaaS pago)
-- Decidir entre 2+ caminhos arquiteturais
-- Tomar decisão que afete preço ou modelo de negócio
-- Lidar com dados pessoais de forma diferente do padrão
-
-## Glossário do produto
-
-- **Link mestre**: a URL única da empresa (ex: `oficial.sourceauthority.com.br/zeus`)
-- **Slug**: identificador da empresa na URL (ex: `zeus`, `marca-x`)
-- **Evento**: cada clique ou interação registrada
-- **Detecção**: alerta de uso indevido de conteúdo
-- **Tenant**: cada empresa cliente (multi-tenant architecture)
-- **Subagente**: instância especializada do Claude Code (`@architect`, etc.)
