@@ -31,11 +31,28 @@ const bodySchema = z.object({
     .max(64)
     .regex(/^[a-z0-9-]+$/),
   url: z.string().url().max(2000).nullable().optional(),
+  url_path: z.string().max(500).nullable().optional(),
   referrer: z.string().max(2000).nullable().optional(),
   ref: z.string().max(64).nullable().optional(),
   lang: z.string().max(20).nullable().optional(),
-  // Pillar 3 v2 — UUID gerado pelo pixel.js pra match em /api/pixel/conversion.
   session_id: z.string().max(64).nullable().optional(),
+  // Browser/device (pixel.js coleta).
+  screen_width: z.number().int().min(0).max(16384).nullable().optional(),
+  screen_height: z.number().int().min(0).max(16384).nullable().optional(),
+  viewport_width: z.number().int().min(0).max(16384).nullable().optional(),
+  viewport_height: z.number().int().min(0).max(16384).nullable().optional(),
+  color_depth: z.number().int().min(0).max(64).nullable().optional(),
+  device_pixel_ratio: z.number().min(0).max(10).nullable().optional(),
+  network_type: z
+    .enum(["slow-2g", "2g", "3g", "4g", "5g", "unknown"])
+    .nullable()
+    .optional(),
+  // UTM params (paralelo ao ?ref= proprietário).
+  utm_source: z.string().max(200).nullable().optional(),
+  utm_medium: z.string().max(200).nullable().optional(),
+  utm_campaign: z.string().max(200).nullable().optional(),
+  utm_term: z.string().max(200).nullable().optional(),
+  utm_content: z.string().max(200).nullable().optional(),
 });
 
 const CORS_HEADERS = {
@@ -82,8 +99,7 @@ export async function POST(req: Request) {
 
   if (!company) return noContent();
 
-  // Parse User-Agent + headers Vercel pra device + ip_country (mesmo
-  // pattern do tracker worker mas em Node).
+  // Vercel Edge headers — mesma família do CF: x-vercel-ip-* + x-vercel-ip-timezone, etc.
   const ua = req.headers.get("user-agent") ?? null;
   const ipCountryRaw = req.headers.get("x-vercel-ip-country");
   const ipCountry =
@@ -91,6 +107,16 @@ export async function POST(req: Request) {
       ? ipCountryRaw.toUpperCase()
       : null;
   const ipCity = req.headers.get("x-vercel-ip-city") ?? null;
+  const ipRegion = req.headers.get("x-vercel-ip-country-region") ?? null;
+  const ipContinent = req.headers.get("x-vercel-ip-continent") ?? null;
+  const ipTimezone = req.headers.get("x-vercel-ip-timezone") ?? null;
+  const ipLatRaw = req.headers.get("x-vercel-ip-latitude");
+  const ipLngRaw = req.headers.get("x-vercel-ip-longitude");
+  const parseCoord = (v: string | null): number | null => {
+    if (!v) return null;
+    const n = parseFloat(v);
+    return Number.isFinite(n) ? n : null;
+  };
 
   const device = parseDevice(ua);
   const referrerCode = parseRefCode(parsed.ref ?? null);
@@ -98,13 +124,35 @@ export async function POST(req: Request) {
   const insertResult = await supabase.from("events").insert({
     company_id: company.id,
     device,
+    // Geo
     ip_country: ipCountry,
     ip_city: ipCity,
+    ip_region: ipRegion,
+    ip_continent: ipContinent,
+    ip_timezone: ipTimezone,
+    ip_latitude: parseCoord(ipLatRaw),
+    ip_longitude: parseCoord(ipLngRaw),
+    // Headers / UA
     lang: parsed.lang ?? null,
     referrer: parsed.referrer ?? null,
     user_agent: ua,
     referrer_code: referrerCode,
     session_id: parsed.session_id ?? null,
+    // URL context
+    url_path: parsed.url_path ?? null,
+    utm_source: parsed.utm_source ?? null,
+    utm_medium: parsed.utm_medium ?? null,
+    utm_campaign: parsed.utm_campaign ?? null,
+    utm_term: parsed.utm_term ?? null,
+    utm_content: parsed.utm_content ?? null,
+    // Browser/device (pixel-only)
+    screen_width: parsed.screen_width ?? null,
+    screen_height: parsed.screen_height ?? null,
+    viewport_width: parsed.viewport_width ?? null,
+    viewport_height: parsed.viewport_height ?? null,
+    color_depth: parsed.color_depth ?? null,
+    device_pixel_ratio: parsed.device_pixel_ratio ?? null,
+    network_type: parsed.network_type ?? null,
   });
 
   if (insertResult.error) {
