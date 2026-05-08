@@ -21,28 +21,36 @@ export const META_OAUTH_BASE = "https://www.facebook.com/v22.0/dialog/oauth";
 export const META_GRAPH_BASE = "https://graph.facebook.com/v22.0";
 
 /**
- * Login do Facebook para Empresas usa `config_id` (referência à
- * Login Configuration criada no Meta dashboard) em vez de `scope=`.
- * As permissões são definidas dentro da config no Meta, não na URL.
+ * Scope-based OAuth flow (legacy/universal). Funciona em qualquer app
+ * que tenha permissions adicionadas via "Casos de uso → Personalizar
+ * acesso ao Instagram". Mais robusto que config_id em apps recém-criados.
  */
 
+export const REQUIRED_SCOPES = [
+  "pages_show_list",
+  "pages_read_engagement",
+  "instagram_basic",
+  "business_management",
+] as const;
+
 export function isInstagramConfigured(): boolean {
-  return Boolean(
-    env.META_APP_ID && env.META_APP_SECRET && env.META_LOGIN_CONFIG_ID,
-  );
+  return Boolean(env.META_APP_ID && env.META_APP_SECRET);
 }
 
 export function buildAuthorizeUrl(state: string, redirectUri: string): string {
   if (!env.META_APP_ID) throw new Error("META_APP_ID não configurado");
-  if (!env.META_LOGIN_CONFIG_ID)
-    throw new Error("META_LOGIN_CONFIG_ID não configurado");
   const params = new URLSearchParams({
     client_id: env.META_APP_ID,
     redirect_uri: redirectUri,
     response_type: "code",
-    config_id: env.META_LOGIN_CONFIG_ID,
+    scope: REQUIRED_SCOPES.join(","),
     state,
   });
+  // Se config_id estiver setado, anexa também (Meta aceita ambos —
+  // alguns apps requerem o config_id).
+  if (env.META_LOGIN_CONFIG_ID) {
+    params.set("config_id", env.META_LOGIN_CONFIG_ID);
+  }
   return `${META_OAUTH_BASE}?${params.toString()}`;
 }
 
