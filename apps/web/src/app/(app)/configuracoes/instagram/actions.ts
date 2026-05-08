@@ -15,7 +15,13 @@ export type ActionResult =
 export type ScanNowResult =
   | {
       ok: true;
-      summary: { watches: number; posts_seen: number; alerts_created: number };
+      summary: {
+        watches: number;
+        watches_failed: number;
+        posts_seen: number;
+        alerts_created: number;
+        errors: Array<{ hashtag: string; detail: string }>;
+      };
     }
   | { ok: false; message: string };
 
@@ -157,6 +163,8 @@ export async function triggerHashtagScan(): Promise<ScanNowResult> {
   let totalSeen = 0;
   let totalAlerts = 0;
   let watchesOk = 0;
+  let watchesFailed = 0;
+  const errors: Array<{ hashtag: string; detail: string }> = [];
 
   for (const watch of watches) {
     try {
@@ -180,11 +188,11 @@ export async function triggerHashtagScan(): Promise<ScanNowResult> {
         },
       );
       if (!res.ok) {
-        console.warn(
-          "[triggerScan] watch failed",
-          watch.hashtag,
-          res.status,
-        );
+        const text = await res.text().catch(() => "");
+        const detail = `HTTP ${res.status}: ${text.slice(0, 280)}`;
+        console.warn("[triggerScan] watch failed", watch.hashtag, detail);
+        errors.push({ hashtag: watch.hashtag, detail });
+        watchesFailed += 1;
         continue;
       }
       const body = (await res.json()) as {
@@ -195,7 +203,10 @@ export async function triggerHashtagScan(): Promise<ScanNowResult> {
       totalAlerts += body.alerts_created ?? 0;
       watchesOk += 1;
     } catch (err) {
-      console.warn("[triggerScan] error", watch.hashtag, err);
+      const detail = err instanceof Error ? err.message : String(err);
+      console.warn("[triggerScan] error", watch.hashtag, detail);
+      errors.push({ hashtag: watch.hashtag, detail });
+      watchesFailed += 1;
     }
   }
 
@@ -206,6 +217,8 @@ export async function triggerHashtagScan(): Promise<ScanNowResult> {
     ok: true,
     summary: {
       watches: watchesOk,
+      watches_failed: watchesFailed,
+      errors: errors.slice(0, 5),
       posts_seen: totalSeen,
       alerts_created: totalAlerts,
     },

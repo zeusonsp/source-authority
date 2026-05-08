@@ -375,7 +375,14 @@ function TriggerScanButton() {
   const [pending, startScan] = useTransition();
   const [result, setResult] = useState<
     | null
-    | { ok: true; watches: number; posts: number; alerts: number }
+    | {
+        ok: true;
+        watches: number;
+        watchesFailed: number;
+        posts: number;
+        alerts: number;
+        errors: Array<{ hashtag: string; detail: string }>;
+      }
     | { ok: false; message: string }
   >(null);
 
@@ -388,13 +395,15 @@ function TriggerScanButton() {
         setResult({
           ok: true,
           watches: r.summary.watches,
+          watchesFailed: r.summary.watches_failed,
           posts: r.summary.posts_seen,
           alerts: r.summary.alerts_created,
+          errors: r.summary.errors,
         });
       } else {
         setResult({ ok: false, message: r.message });
       }
-      setTimeout(() => setResult(null), 8000);
+      setTimeout(() => setResult(null), 30000);
     });
   }
 
@@ -416,12 +425,32 @@ function TriggerScanButton() {
         Disparar varredura agora
       </Button>
       {result?.ok ? (
-        <Alert className="border-emerald-400/40 bg-emerald-400/10 text-emerald-400">
-          <CheckCircle2 className="size-4" />
+        <Alert
+          className={
+            result.watchesFailed > 0
+              ? "border-amber-400/40 bg-amber-400/10 text-amber-400"
+              : "border-emerald-400/40 bg-emerald-400/10 text-emerald-400"
+          }
+        >
+          {result.watchesFailed > 0 ? (
+            <AlertCircle className="size-4" />
+          ) : (
+            <CheckCircle2 className="size-4" />
+          )}
           <AlertDescription>
-            Varredura concluída em {result.watches} hashtag(s):{" "}
-            {result.posts} posts analisados, {result.alerts} alerta(s)
-            criado(s).
+            <div>
+              Varredura: {result.watches} ok, {result.watchesFailed}{" "}
+              falharam · {result.posts} posts · {result.alerts} alerta(s).
+            </div>
+            {result.errors.length > 0 ? (
+              <ul className="mt-2 space-y-1 font-mono text-[11px]">
+                {result.errors.map((e, idx) => (
+                  <li key={idx} className="break-all">
+                    <strong>#{e.hashtag}</strong>: {e.detail}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </AlertDescription>
         </Alert>
       ) : null}
