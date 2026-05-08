@@ -42,6 +42,13 @@ interface EventPayload {
   lang: string | null;
   referrer: string | null;
   user_agent: string | null;
+  // Parsed UA (Migration 0013)
+  browser_name: string | null;
+  browser_version: string | null;
+  os_name: string | null;
+  os_version: string | null;
+  device_vendor: string | null;
+  device_model: string | null;
   // URL context
   url_path: string | null;
   utm_source: string | null;
@@ -196,9 +203,19 @@ function buildEvent(request: Request, company_id: string): EventPayload {
   const cf = cfRequest.cf;
   const sp = url.searchParams;
 
+  // Parse UA pra extrair browser/os/device. Implementação inline (regex) —
+  // sem dependência externa pra evitar conflito de versões em Workers.
+  const uaParsed = parseFullUA(ua);
+
   return {
     company_id,
-    device: parseDevice(ua),
+    device: uaParsed.device_type,
+    browser_name: uaParsed.browser_name,
+    browser_version: uaParsed.browser_version,
+    os_name: uaParsed.os_name,
+    os_version: uaParsed.os_version,
+    device_vendor: uaParsed.device_vendor,
+    device_model: uaParsed.device_model,
     // CHECK do DB exige ISO 3166-1 alpha-2 maiúsculo ou null. Normalizamos.
     ip_country: ipCountry && /^[A-Z]{2}$/.test(ipCountry) ? ipCountry : null,
     // cf-ipcity não é header padrão Cloudflare. A API canônica é
@@ -236,16 +253,138 @@ function parseRefCode(raw: string | null): string | null {
   return cleaned;
 }
 
-function parseDevice(
-  ua: string | null,
-): "mobile" | "desktop" | "tablet" | "unknown" {
-  if (!ua) return "unknown";
-  const lower = ua.toLowerCase();
-  // Tablet primeiro (iPad é também Mobile na regex genérica).
-  if (/ipad|tablet|playbook|silk/.test(lower)) return "tablet";
-  if (/mobi|android|iphone|ipod|opera mini|iemobile/.test(lower))
-    return "mobile";
-  return "desktop";
+// ─────────────────────────────────────────────────────────────────────────────
+// UA parsing — inline regex (sem dep externa pra Workers ficar leve).
+// Cobre ~95% dos UAs em produção (Chrome/Safari/Firefox/Edge + iOS/Android/
+// Windows/macOS + iPhone/iPad/Samsung/Pixel/Xiaomi/Motorola).
+// Mesma lógica que apps/web/src/lib/tracking/parse-ua.ts — DRY refactor
+// pra packages/shared quando 3rd consumer aparecer.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface ParsedUA {
+  browser_name: string | null;
+  browser_version: string | null;
+  os_name: string | null;
+  os_version: string | null;
+  device_vendor: string | null;
+  device_model: string | null;
+  device_type: "mobile" | "desktop" | "tablet" | "unknown";
+}
+
+function parseFullUA(ua: string | null): ParsedUA {
+  if (!ua) {
+    return {
+      browser_name: null,
+      browser_version: null,
+      os_name: null,
+      os_version: null,
+      device_vendor: null,
+      device_model: null,
+      device_type: "unknown",
+    };
+  }
+
+  // Browser
+  let browserName: string | null = null;
+  let browserVersion: string | null = null;
+  let m = ua.match(/Edg\/([\d.]+)/);
+  if (m) {
+    browserName = "Edge";
+    browserVersion = m[1] ?? null;
+  } else if ((m = ua.match(/OPR\/([\d.]+)|Opera\/([\d.]+)/))) {
+    browserName = "Opera";
+    browserVersion = m[1] ?? m[2] ?? null;
+  } else if ((m = ua.match(/Chrome\/([\d.]+)/))) {
+    browserName = "Chrome";
+    browserVersion = m[1] ?? null;
+  } else if ((m = ua.match(/Firefox\/([\d.]+)/))) {
+    browserName = "Firefox";
+    browserVersion = m[1] ?? null;
+  } else if ((m = ua.match(/Version\/([\d.]+).*Safari/))) {
+    browserName = "Safari";
+    browserVersion = m[1] ?? null;
+  } else if ((m = ua.match(/SamsungBrowser\/([\d.]+)/))) {
+    browserName = "Samsung Internet";
+    browserVersion = m[1] ?? null;
+  }
+
+  // OS
+  let osName: string | null = null;
+  let osVersion: string | null = null;
+  if (/iPhone|iPad|iPod/.test(ua)) {
+    osName = "iOS";
+    const im = ua.match(/OS (\d+[._]\d+(?:[._]\d+)?)/);
+    osVersion = im ? im[1]!.replace(/_/g, ".") : null;
+  } else if ((m = ua.match(/Android (\d+(?:\.\d+)*)/))) {
+    osName = "Android";
+    osVersion = m[1] ?? null;
+  } else if ((m = ua.match(/Windows NT (\d+\.\d+)/))) {
+    osName = "Windows";
+    const v = m[1]!;
+    const human: Record<string, string> = {
+      "10.0": "10/11",
+      "6.3": "8.1",
+      "6.2": "8",
+      "6.1": "7",
+    };
+    osVersion = human[v] ?? v;
+  } else if ((m = ua.match(/Mac OS X (\d+[._]\d+(?:[._]\d+)?)/))) {
+    osName = "macOS";
+    osVersion = m[1]!.replace(/_/g, ".");
+  } else if (/CrOS/.test(ua)) {
+    osName = "ChromeOS";
+  } else if (/Linux/.test(ua)) {
+    osName = "Linux";
+  }
+
+  // Device
+  let deviceType: ParsedUA["device_type"] = "desktop";
+  let deviceVendor: string | null = null;
+  let deviceModel: string | null = null;
+
+  if (/iPad/.test(ua)) {
+    deviceVendor = "Apple";
+    deviceModel = "iPad";
+    deviceType = "tablet";
+  } else if (/iPhone/.test(ua)) {
+    deviceVendor = "Apple";
+    deviceModel = "iPhone";
+    deviceType = "mobile";
+  } else if (/iPod/.test(ua)) {
+    deviceVendor = "Apple";
+    deviceModel = "iPod";
+    deviceType = "mobile";
+  } else if (
+    (m = ua.match(/Android[^;]*;\s*([^;)]+?)(?:\s+Build|\s*[;)])/))
+  ) {
+    deviceModel = m[1]!.trim().slice(0, 128);
+    if (/^SM-|Galaxy|^GT-|^SC-/i.test(deviceModel)) deviceVendor = "Samsung";
+    else if (/^Pixel/i.test(deviceModel)) deviceVendor = "Google";
+    else if (/^MI |^Redmi|Xiaomi|^M\d{4}/i.test(deviceModel)) deviceVendor = "Xiaomi";
+    else if (/^Moto|^XT/i.test(deviceModel)) deviceVendor = "Motorola";
+    else if (/^LG|^LM-/i.test(deviceModel)) deviceVendor = "LG";
+    else if (/^OPPO|^CPH/i.test(deviceModel)) deviceVendor = "Oppo";
+    else if (/^vivo|^V\d{4}/i.test(deviceModel)) deviceVendor = "Vivo";
+    else if (/^HUAWEI|^Honor|^ANE/i.test(deviceModel)) deviceVendor = "Huawei";
+    else if (/^OnePlus/i.test(deviceModel)) deviceVendor = "OnePlus";
+    deviceType = "mobile";
+  } else if (/Android/.test(ua)) {
+    deviceType = "mobile";
+  } else if (/Tablet|PlayBook|Silk|Kindle/.test(ua)) {
+    deviceType = "tablet";
+  } else if (/Mobi|webOS|BlackBerry|IEMobile/.test(ua)) {
+    deviceType = "mobile";
+  }
+
+  return {
+    browser_name: browserName ? browserName.slice(0, 64) : null,
+    browser_version: browserVersion ? browserVersion.slice(0, 32) : null,
+    os_name: osName ? osName.slice(0, 64) : null,
+    os_version: osVersion ? osVersion.slice(0, 32) : null,
+    device_vendor: deviceVendor ? deviceVendor.slice(0, 64) : null,
+    device_model: deviceModel ? deviceModel.slice(0, 128) : null,
+    device_type: deviceType,
+  };
 }
 
 function parseAcceptLanguage(header: string | null): string | null {

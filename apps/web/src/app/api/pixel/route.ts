@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@source-authority/shared";
 import { env as clientEnv } from "@/lib/env";
 import { env } from "@/lib/env-server";
+import { parseUserAgent } from "@/lib/tracking/parse-ua";
 
 /**
  * POST /api/pixel — endpoint público de tracking via JavaScript embed.
@@ -118,7 +119,10 @@ export async function POST(req: Request) {
     return Number.isFinite(n) ? n : null;
   };
 
-  const device = parseDevice(ua);
+  const uaParsed = parseUserAgent(ua);
+  // Mantém compat com lógica antiga (campo `device` continua existindo
+  // como mobile/desktop/tablet/unknown). uaParsed.device_type é a fonte.
+  const device = uaParsed.device_type;
   const referrerCode = parseRefCode(parsed.ref ?? null);
 
   const insertResult = await supabase.from("events").insert({
@@ -136,6 +140,13 @@ export async function POST(req: Request) {
     lang: parsed.lang ?? null,
     referrer: parsed.referrer ?? null,
     user_agent: ua,
+    // Parsed UA (Migration 0013).
+    browser_name: uaParsed.browser_name,
+    browser_version: uaParsed.browser_version,
+    os_name: uaParsed.os_name,
+    os_version: uaParsed.os_version,
+    device_vendor: uaParsed.device_vendor,
+    device_model: uaParsed.device_model,
     referrer_code: referrerCode,
     session_id: parsed.session_id ?? null,
     // URL context
@@ -165,18 +176,6 @@ export async function POST(req: Request) {
   }
 
   return noContent();
-}
-
-function parseDevice(
-  ua: string | null,
-): "mobile" | "desktop" | "tablet" | "unknown" {
-  if (!ua) return "unknown";
-  const lower = ua.toLowerCase();
-  if (/ipad|tablet|playbook|silk/.test(lower)) return "tablet";
-  if (/mobi|android|iphone|ipod|opera mini|iemobile/.test(lower)) {
-    return "mobile";
-  }
-  return "desktop";
 }
 
 function parseRefCode(raw: string | null): string | null {

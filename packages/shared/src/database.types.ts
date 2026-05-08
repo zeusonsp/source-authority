@@ -297,11 +297,15 @@ export type Database = {
       }
       events: {
         Row: {
+          browser_name: string | null
+          browser_version: string | null
           color_depth: number | null
           company_id: string
           created_at: string
           device: string | null
+          device_model: string | null
           device_pixel_ratio: number | null
+          device_vendor: string | null
           id: string
           ip_asn: number | null
           ip_city: string | null
@@ -315,6 +319,8 @@ export type Database = {
           ip_timezone: string | null
           lang: string | null
           network_type: string | null
+          os_name: string | null
+          os_version: string | null
           referrer: string | null
           referrer_code: string | null
           screen_height: number | null
@@ -331,11 +337,15 @@ export type Database = {
           viewport_width: number | null
         }
         Insert: {
+          browser_name?: string | null
+          browser_version?: string | null
           color_depth?: number | null
           company_id: string
           created_at?: string
           device?: string | null
+          device_model?: string | null
           device_pixel_ratio?: number | null
+          device_vendor?: string | null
           id?: string
           ip_asn?: number | null
           ip_city?: string | null
@@ -349,6 +359,8 @@ export type Database = {
           ip_timezone?: string | null
           lang?: string | null
           network_type?: string | null
+          os_name?: string | null
+          os_version?: string | null
           referrer?: string | null
           referrer_code?: string | null
           screen_height?: number | null
@@ -365,11 +377,15 @@ export type Database = {
           viewport_width?: number | null
         }
         Update: {
+          browser_name?: string | null
+          browser_version?: string | null
           color_depth?: number | null
           company_id?: string
           created_at?: string
           device?: string | null
+          device_model?: string | null
           device_pixel_ratio?: number | null
+          device_vendor?: string | null
           id?: string
           ip_asn?: number | null
           ip_city?: string | null
@@ -383,6 +399,8 @@ export type Database = {
           ip_timezone?: string | null
           lang?: string | null
           network_type?: string | null
+          os_name?: string | null
+          os_version?: string | null
           referrer?: string | null
           referrer_code?: string | null
           screen_height?: number | null
