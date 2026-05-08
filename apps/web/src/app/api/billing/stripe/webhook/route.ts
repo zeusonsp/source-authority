@@ -7,6 +7,10 @@ import type { Database } from "@source-authority/shared";
 
 import { stripe, PLAN_PRICE_IDS, type PlanSlug } from "@/lib/billing/stripe";
 import { env } from "@/lib/env-server";
+import {
+  notifyBillingEvent,
+  type BillingEvent,
+} from "@/lib/notifications/notify-billing";
 
 /**
  * Stripe webhook handler — Phase 7 (B7.4).
@@ -323,5 +327,53 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "rpc failed" }, { status: 500 });
   }
 
+  // Dispatch transactional emails (B7.6). Fire-and-forget — falha de email
+  // não retorna non-2xx pro Stripe (não queremos retry só por causa de
+  // email). Apenas eventos com company_id resolvido + plano elegível.
+  const billingEv = mapEventToBilling(event, params);
+  if (billingEv && params.company_id) {
+    notifyBillingEvent(supabase, params.company_id, billingEv).catch((err) => {
+      console.error("[stripe-webhook] notifyBillingEvent failed", {
+        event_id: event.id,
+        kind: billingEv.kind,
+        err: err instanceof Error ? err.message : String(err),
+      });
+    });
+  }
+
   return NextResponse.json({ received: true });
+}
+
+/**
+ * Mapeia evento Stripe → BillingEvent (ou null se não dispara email).
+ * Welcome trial só pra checkout.session.completed COM trial_end.
+ */
+function mapEventToBilling(
+  event: Stripe.Event,
+  params: RpcParams,
+): BillingEvent | null {
+  switch (event.type) {
+    case "checkout.session.completed": {
+      // Só dispara welcome se realmente entrou em trial (status=trialing
+      // E plan resolvido). Evita email duplo se webhook chegou fora de ordem.
+      if (
+        params.new_status === "trialing" &&
+        params.new_plan &&
+        params.new_plan !== "starter"
+      ) {
+        return {
+          kind: "welcome_trial",
+          trial_ends_at: params.trial_ends_at,
+          plan: params.new_plan,
+        };
+      }
+      return null;
+    }
+    case "invoice.payment_failed":
+      return { kind: "payment_failed" };
+    case "customer.subscription.deleted":
+      return { kind: "subscription_canceled" };
+    default:
+      return null;
+  }
 }
