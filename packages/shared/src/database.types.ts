@@ -565,6 +565,120 @@ export type Database = {
           },
         ]
       }
+      hashtag_watches: {
+        Row: {
+          active: boolean
+          company_id: string
+          created_at: string
+          created_by: string | null
+          hashtag: string
+          id: string
+          ig_hashtag_id: string | null
+          last_polled_at: string | null
+          last_post_cursor: string | null
+        }
+        Insert: {
+          active?: boolean
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          hashtag: string
+          id?: string
+          ig_hashtag_id?: string | null
+          last_polled_at?: string | null
+          last_post_cursor?: string | null
+        }
+        Update: {
+          active?: boolean
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          hashtag?: string
+          id?: string
+          ig_hashtag_id?: string | null
+          last_polled_at?: string | null
+          last_post_cursor?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hashtag_watches_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hashtag_watches_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      instagram_connections: {
+        Row: {
+          access_token: string
+          company_id: string
+          connected_at: string
+          connected_by: string | null
+          fb_page_id: string | null
+          fb_page_name: string | null
+          granted_scopes: string[] | null
+          id: string
+          ig_user_id: string
+          ig_username: string | null
+          last_polled_at: string | null
+          status: string
+          token_expires_at: string | null
+        }
+        Insert: {
+          access_token: string
+          company_id: string
+          connected_at?: string
+          connected_by?: string | null
+          fb_page_id?: string | null
+          fb_page_name?: string | null
+          granted_scopes?: string[] | null
+          id?: string
+          ig_user_id: string
+          ig_username?: string | null
+          last_polled_at?: string | null
+          status?: string
+          token_expires_at?: string | null
+        }
+        Update: {
+          access_token?: string
+          company_id?: string
+          connected_at?: string
+          connected_by?: string | null
+          fb_page_id?: string | null
+          fb_page_name?: string | null
+          granted_scopes?: string[] | null
+          id?: string
+          ig_user_id?: string
+          ig_username?: string | null
+          last_polled_at?: string | null
+          status?: string
+          token_expires_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "instagram_connections_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: true
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "instagram_connections_connected_by_fkey"
+            columns: ["connected_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       memberships: {
         Row: {
           company_id: string
