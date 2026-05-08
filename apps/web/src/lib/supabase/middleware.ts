@@ -26,6 +26,11 @@ const PUBLIC_PREFIXES = [
   // Endpoints internal — chamados pelos workers (CF) com Bearer secret;
   // auth via INTERNAL_NOTIFICATIONS_SECRET dentro do route handler.
   "/api/internal/",
+  // Pixel público de tracking — embedado no site do cliente (zeusoficial.com).
+  // Aceita CORS de qualquer origin; valida slug existe em companies.
+  "/api/pixel",
+  // Pixel JS estático servido pelo CDN.
+  "/pixel.js",
 ];
 
 /**
