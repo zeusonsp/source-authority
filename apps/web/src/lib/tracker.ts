@@ -1,14 +1,19 @@
 /**
  * Tracker (Cloudflare Worker) — base URL e helper de link mestre.
  *
- * Tech debt (rastreado em CLAUDE.md): vira env var
- * NEXT_PUBLIC_TRACKER_BASE_URL quando tivermos staging/prod separados
- * ou quando custom domain (oficial.sourceauthority.com.br) substituir
- * o subdomínio .workers.dev. Por agora hardcoded — Zeus dogfood = um
- * worker, uma URL.
+ * Lê de NEXT_PUBLIC_TRACKER_BASE_URL (público, ok client). Fallback
+ * pro subdomínio `.workers.dev` mantém compat com setup atual de
+ * dogfood. Quando custom domain `go.sourceauthority.com.br` for
+ * configurado (CF Workers route), bastará mudar o env var sem code.
  */
-export const TRACKER_BASE_URL =
+const FALLBACK_TRACKER_URL =
   "https://source-authority-tracker.zeusonsp.workers.dev";
+
+export const TRACKER_BASE_URL =
+  (process.env.NEXT_PUBLIC_TRACKER_BASE_URL ?? FALLBACK_TRACKER_URL).replace(
+    /\/+$/,
+    "",
+  );
 
 export function trackerUrl(slug: string): string {
   return `${TRACKER_BASE_URL}/${slug}`;
