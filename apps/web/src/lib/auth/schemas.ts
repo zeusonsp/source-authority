@@ -36,5 +36,21 @@ export const resendConfirmationSchema = z.object({
   email: z.string().email("E-mail inválido."),
 });
 
+export const forgotPasswordSchema = z.object({
+  email: z.string().email("E-mail inválido."),
+});
+
+export const resetPasswordSchema = z
+  .object({
+    password: passwordPolicy,
+    confirm_password: z.string(),
+  })
+  .refine((data) => data.password === data.confirm_password, {
+    message: "As senhas não conferem.",
+    path: ["confirm_password"],
+  });
+
 export type LoginInput = z.infer<typeof loginSchema>;
 export type SignupInput = z.infer<typeof signupSchema>;
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;

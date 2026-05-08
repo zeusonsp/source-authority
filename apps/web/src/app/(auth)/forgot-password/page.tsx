@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { ForgotPasswordForm } from "@/components/auth/forgot-password-form";
 
 export const metadata = {
   title: "Recuperar senha",
@@ -12,16 +12,11 @@ export default function ForgotPasswordPage() {
           Recuperar senha
         </h2>
         <p className="text-sm text-muted-foreground">
-          Em breve. Por enquanto, entre em contato com o suporte para resetar
-          sua senha.
+          Digite seu e-mail e enviaremos um link pra você redefinir a senha.
         </p>
       </div>
 
-      <p className="text-center text-sm">
-        <Link href="/login" className="text-accent hover:underline">
-          ← Voltar para o login
-        </Link>
-      </p>
+      <ForgotPasswordForm />
     </div>
   );
 }
