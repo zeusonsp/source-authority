@@ -16,7 +16,22 @@ const PUBLIC_PATHS = new Set<string>([
   "/forgot-password",
 ]);
 
-const PUBLIC_PREFIXES = ["/auth/", "/_next/", "/favicon"];
+const PUBLIC_PREFIXES = [
+  "/auth/",
+  "/_next/",
+  "/favicon",
+  // Webhook do Stripe — chamado pelo Stripe sem cookies; auth via signature
+  // verify dentro do route handler (constructEvent).
+  "/api/billing/stripe/webhook",
+  // Endpoints internal — chamados pelos workers (CF) com Bearer secret;
+  // auth via INTERNAL_NOTIFICATIONS_SECRET dentro do route handler.
+  "/api/internal/",
+  // Pixel público de tracking — embedado no site do cliente (zeusoficial.com).
+  // Aceita CORS de qualquer origin; valida slug existe em companies.
+  "/api/pixel",
+  // Pixel JS estático servido pelo CDN.
+  "/pixel.js",
+];
 
 /**
  * Caminhos onde um usuário JÁ logado deve ser empurrado pra /dashboard

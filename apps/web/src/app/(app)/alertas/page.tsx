@@ -1,15 +1,99 @@
-import { PlaceholderPage } from "@/components/app/placeholder-page";
+import { redirect } from "next/navigation";
+import { requireAuth } from "@/lib/auth/server";
+import {
+  ALERT_STATUSES,
+  type AlertRow,
+  type AlertStatus,
+} from "@/lib/alerts/types";
+import { createClient } from "@/lib/supabase/server";
+import { AlertasClient } from "./alertas-client";
 
 export const metadata = {
   title: "Alertas",
 };
 
-export default function AlertasPage() {
+type PageProps = {
+  searchParams?: { status?: string };
+};
+
+export default async function AlertasPage({ searchParams }: PageProps) {
+  await requireAuth();
+  const supabase = createClient();
+
+  // Onboarding gate (mesmo padrão do dashboard/relatorios).
+  const { data: memberships } = await supabase
+    .from("memberships")
+    .select("*")
+    .limit(1);
+  if (!memberships || memberships.length === 0) {
+    redirect("/onboarding");
+  }
+  const membership = memberships[0]!;
+
+  const statusFilter: AlertStatus | "all" = ((): AlertStatus | "all" => {
+    const s = searchParams?.status;
+    if (s && (ALERT_STATUSES as readonly string[]).includes(s)) {
+      return s as AlertStatus;
+    }
+    return "all";
+  })();
+
+  // Query alerts via SSR client (RLS member-level select).
+  // Quando a migration 0008_alerts ainda não foi aplicada em prod, esta
+  // query falha com PGRST205 ("Could not find the table"). Tratamos
+  // graceful pra renderizar empty state em vez de crash.
+  let alerts: AlertRow[] = [];
+  let tableMissing = false;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const query: any = supabase
+    .from("alerts" as never)
+    .select("*")
+    .eq("company_id", membership.company_id)
+    .order("created_at", { ascending: false })
+    .limit(200);
+
+  if (statusFilter !== "all") {
+    query.eq("status", statusFilter);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    // Tabela ainda não existe (migration pendente) — tratamos como zero alerts.
+    if (error.code === "PGRST205" || error.message?.includes("alerts")) {
+      tableMissing = true;
+    } else {
+      console.error("[/alertas] query error:", error);
+    }
+  } else if (Array.isArray(data)) {
+    alerts = data as AlertRow[];
+  }
+
+  // KPIs simples (calculados em memória — volume baixo no MVP).
+  const counts = {
+    total: alerts.length,
+    new: alerts.filter((a) => a.status === "new").length,
+    high: alerts.filter((a) => a.severity === "high").length,
+  };
+
   return (
-    <PlaceholderPage
-      title="Alertas"
-      badge="Em construção · Fase 5"
-      description="Esta tela será implementada na Fase 5 do roadmap (detecção de uso indevido via Google Alerts, DNStwist e cliques anômalos). Quando ligada, você verá aqui menções da marca, domínios similares e padrões de tráfego suspeitos."
-    />
+    <div className="container py-8">
+      <div className="mx-auto max-w-6xl space-y-6">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight">Alertas</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Detecção de uso indevido da marca: domínios sound-alike,
+            certificados SSL suspeitos e menções na web.
+          </p>
+        </div>
+
+        <AlertasClient
+          alerts={alerts}
+          counts={counts}
+          tableMissing={tableMissing}
+          currentStatus={statusFilter}
+        />
+      </div>
+    </div>
   );
 }

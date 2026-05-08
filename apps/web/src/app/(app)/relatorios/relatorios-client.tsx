@@ -3,7 +3,7 @@
 import { Download, Loader2 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import {
   Bar,
   BarChart,
@@ -30,7 +30,11 @@ import {
   type ReportPreset,
 } from "@/lib/relatorios/types";
 import { cn } from "@/lib/utils";
-import { exportEventsCSV } from "./actions";
+import {
+  exportEventsCSV,
+  getLiveStats,
+  type LiveStatsResult,
+} from "./actions";
 
 // Map é a parte mais pesada (react-simple-maps + d3-geo + topojson fetch).
 // Lazy load com ssr:false reduz o bundle do server-rendered HTML inicial.
@@ -61,14 +65,22 @@ export function RelatoriosClient({ data }: Props) {
   return (
     <div className="space-y-6">
       <DateRangeBar range={data.range} />
+      <LivePulse />
 
       {isEmpty ? (
         <EmptyState />
       ) : (
         <>
-          <KpiGrid kpis={data.kpis} />
+          <KpiGrid kpis={data.kpis} kpisPrevious={data.kpisPrevious} />
           <HourlyChart data={data.hourly} />
           <DailyChart data={data.daily} />
+          <HeatmapCard
+            matrix={data.heatmap}
+            peak={data.heatmapPeak}
+          />
+          {data.kpis.conversions > 0 ? (
+            <RevenueChart data={data.dailyRevenue} />
+          ) : null}
           <MapSection topCountries={data.topCountries} total={data.kpis.total} />
           <BreakdownsRow
             byDevice={data.byDevice}
@@ -76,6 +88,7 @@ export function RelatoriosClient({ data }: Props) {
             byReferrer={data.byReferrer}
             total={data.kpis.total}
           />
+          <TopReferrersCard topReferrers={data.topReferrers} />
           <ExportRow range={data.range} />
         </>
       )}
@@ -182,30 +195,236 @@ function DateRangeBar({ range }: { range: ReportDataset["range"] }) {
 // KPI grid + empty
 // ─────────────────────────────────────────────────────────────────────────────
 
-function KpiGrid({ kpis }: { kpis: ReportDataset["kpis"] }) {
-  const cards = [
-    { label: "Total no período", value: kpis.total },
-    { label: "Últimas 24h", value: kpis.last24h },
-    { label: "Países", value: kpis.countries },
-    { label: "Dias com cliques", value: kpis.activeDays },
-  ];
+/**
+ * Tier 2 — Delta indicator pill com seta + cor baseada em mudança vs
+ * período anterior. Se previous=0 e current>0, mostra "novo". Se ambos
+ * 0, mostra nada (return null).
+ *
+ * Para deltas em PONTOS (taxa de conversão, atribuição %), passa
+ * `inPoints=true`: mostra "+2.3pp" em vez de "+45%".
+ */
+type DeltaIntent = "positive" | "negative" | "neutral";
+
+function computeDelta(
+  current: number,
+  previous: number,
+  /** Se true, retorna delta em pontos (current - previous), não pct. */
+  inPoints = false,
+): { value: string; intent: DeltaIntent } | null {
+  // Sem dados pra comparar.
+  if (previous === 0 && current === 0) return null;
+  if (previous === 0 && current > 0) {
+    return { value: "novo", intent: "positive" };
+  }
+  if (previous > 0 && current === 0) {
+    return { value: "—100%", intent: "negative" };
+  }
+
+  if (inPoints) {
+    const diff = current - previous;
+    const sign = diff > 0 ? "+" : diff < 0 ? "−" : "";
+    return {
+      value: `${sign}${Math.abs(diff).toFixed(1)}pp`,
+      intent: diff > 0 ? "positive" : diff < 0 ? "negative" : "neutral",
+    };
+  }
+
+  const pct = ((current - previous) / previous) * 100;
+  const rounded = Math.round(pct * 10) / 10;
+  const sign = rounded > 0 ? "+" : rounded < 0 ? "−" : "";
+  return {
+    value: `${sign}${Math.abs(rounded)}%`,
+    intent:
+      rounded > 0 ? "positive" : rounded < 0 ? "negative" : "neutral",
+  };
+}
+
+function DeltaPill({
+  delta,
+}: {
+  delta: ReturnType<typeof computeDelta>;
+}) {
+  if (!delta) return null;
+  const colorClass =
+    delta.intent === "positive"
+      ? "text-emerald-400"
+      : delta.intent === "negative"
+        ? "text-rose-400/70"
+        : "text-muted-foreground";
+  const arrow =
+    delta.intent === "positive"
+      ? "↑"
+      : delta.intent === "negative"
+        ? "↓"
+        : "·";
   return (
-    <section
-      aria-label="KPIs do período"
-      className="grid grid-cols-2 gap-3 md:grid-cols-4"
+    <span
+      className={cn(
+        "inline-flex items-center gap-0.5 text-[11px] font-medium tabular-nums",
+        colorClass,
+      )}
     >
-      {cards.map((c) => (
-        <div
-          key={c.label}
-          className="rounded-lg border border-border bg-card p-4"
+      <span>{arrow}</span>
+      <span>{delta.value}</span>
+    </span>
+  );
+}
+
+function KpiGrid({
+  kpis,
+  kpisPrevious,
+}: {
+  kpis: ReportDataset["kpis"];
+  kpisPrevious: ReportDataset["kpisPrevious"];
+}) {
+  const fmtBRL = (cents: number) =>
+    (cents / 100).toLocaleString("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+      maximumFractionDigits: 0,
+    });
+  const fmtN = (n: number) => n.toLocaleString("pt-BR");
+
+  // Compute deltas só se temos kpisPrevious. Tráfego: pct delta. KPIs
+  // que já são em pct (taxa de conversão, atribuição %): pp delta.
+  const dTotal = kpisPrevious
+    ? computeDelta(kpis.total, kpisPrevious.total)
+    : null;
+  const dCountries = kpisPrevious
+    ? computeDelta(kpis.countries, kpisPrevious.countries)
+    : null;
+  const dRevenue = kpisPrevious
+    ? computeDelta(kpis.revenueCents, kpisPrevious.revenueCents)
+    : null;
+  const dSales = kpisPrevious
+    ? computeDelta(kpis.conversions, kpisPrevious.conversions)
+    : null;
+  const dConvRate = kpisPrevious
+    ? computeDelta(kpis.conversionRate, kpisPrevious.conversionRate, true)
+    : null;
+  const dAOV = kpisPrevious
+    ? computeDelta(kpis.aovCents, kpisPrevious.aovCents)
+    : null;
+
+  // Pillar 3 v2 — só mostra cards de receita se houver pelo menos 1
+  // conversão no período (evita ruído visual quando empresa ainda não
+  // tem pixel saTrack instalado).
+  const hasRevenue = kpis.conversions > 0;
+
+  return (
+    <div className="space-y-3">
+      <section
+        aria-label="KPIs de tráfego"
+        className="grid grid-cols-2 gap-3 md:grid-cols-4"
+      >
+        <KpiCard
+          label="Cliques"
+          value={fmtN(kpis.total)}
+          delta={dTotal}
+          deltaHint={
+            kpisPrevious
+              ? `vs ${fmtN(kpisPrevious.total)} no período anterior`
+              : null
+          }
+        />
+        <KpiCard label="Últimas 24h" value={fmtN(kpis.last24h)} />
+        <KpiCard
+          label="Países"
+          value={fmtN(kpis.countries)}
+          delta={dCountries}
+        />
+        <KpiCard label="Dias com cliques" value={fmtN(kpis.activeDays)} />
+      </section>
+
+      {hasRevenue ? (
+        <section
+          aria-label="KPIs de receita"
+          className="grid grid-cols-2 gap-3 md:grid-cols-4"
         >
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">
-            {c.label}
-          </p>
-          <p className="mt-2 text-2xl font-semibold tabular-nums">{c.value}</p>
-        </div>
-      ))}
-    </section>
+          <KpiCard
+            label="Receita"
+            value={fmtBRL(kpis.revenueCents)}
+            accent
+            delta={dRevenue}
+            deltaHint={
+              kpisPrevious
+                ? `vs ${fmtBRL(kpisPrevious.revenueCents)}`
+                : null
+            }
+          />
+          <KpiCard
+            label="Vendas"
+            value={fmtN(kpis.conversions)}
+            delta={dSales}
+            footnote={`${kpis.attributedPct}% atribuídas a revendedor`}
+          />
+          <KpiCard
+            label="Taxa de conversão"
+            value={`${kpis.conversionRate}%`}
+            delta={dConvRate}
+            footnote="vendas / cliques no período"
+          />
+          <KpiCard
+            label="Ticket médio"
+            value={fmtBRL(kpis.aovCents)}
+            delta={dAOV}
+            footnote="receita / vendas"
+          />
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+function KpiCard({
+  label,
+  value,
+  accent = false,
+  delta = null,
+  deltaHint = null,
+  footnote = null,
+}: {
+  label: string;
+  value: string;
+  accent?: boolean;
+  delta?: ReturnType<typeof computeDelta>;
+  deltaHint?: string | null;
+  footnote?: string | null;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-lg border p-4",
+        accent
+          ? "border-accent/40 bg-accent/5"
+          : "border-border bg-card",
+      )}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <p
+          className={cn(
+            "text-xs uppercase tracking-wide",
+            accent ? "text-accent" : "text-muted-foreground",
+          )}
+        >
+          {label}
+        </p>
+        <DeltaPill delta={delta} />
+      </div>
+      <p
+        className={cn(
+          "mt-2 text-2xl font-semibold tabular-nums",
+          accent ? "text-accent" : undefined,
+        )}
+      >
+        {value}
+      </p>
+      {(footnote || deltaHint) && (
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          {footnote ?? deltaHint}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -427,6 +646,445 @@ function BreakdownsRow({
         total={total}
         emptyText="Sem dados de origem."
       />
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Live Pulse (Tier 2 — wow effect)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const LIVE_POLL_MS = 30_000;
+
+function LivePulse() {
+  const [stats, setStats] = useState<LiveStatsResult | null>(null);
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchOnce = async () => {
+      const result = await getLiveStats();
+      if (!cancelled) {
+        setStats(result);
+        setTick((t) => t + 1);
+      }
+    };
+    fetchOnce();
+    const interval = setInterval(fetchOnce, LIVE_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+
+  if (!stats) {
+    return (
+      <div className="rounded-lg border border-border bg-card/50 px-4 py-2.5 text-sm text-muted-foreground">
+        <span className="inline-flex items-center gap-2">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-muted-foreground/40" />
+          Carregando atividade ao vivo...
+        </span>
+      </div>
+    );
+  }
+
+  if (!stats.ok) {
+    // Falha silenciosa (não bloqueia o resto da página).
+    return null;
+  }
+
+  const isLive = stats.recentClicks > 0;
+  const lastEventAgo = stats.lastEventAt
+    ? formatRelativeTime(new Date(stats.lastEventAt))
+    : null;
+
+  return (
+    <div
+      className={cn(
+        "flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-2.5 text-sm",
+        isLive
+          ? "border-emerald-400/40 bg-emerald-400/5"
+          : "border-border bg-card/50",
+      )}
+      // tick força re-render pra animation pulse continuar viva
+      key={tick}
+    >
+      <div className="flex items-center gap-2.5">
+        <span className="relative flex h-2.5 w-2.5">
+          <span
+            className={cn(
+              "absolute inline-flex h-full w-full rounded-full opacity-75",
+              isLive ? "animate-ping bg-emerald-400" : "bg-muted-foreground/30",
+            )}
+          />
+          <span
+            className={cn(
+              "relative inline-flex h-2.5 w-2.5 rounded-full",
+              isLive ? "bg-emerald-400" : "bg-muted-foreground/40",
+            )}
+          />
+        </span>
+        <div>
+          <p className="font-medium">
+            {isLive ? (
+              <>
+                <span className="text-emerald-400">
+                  {stats.recentClicks}
+                </span>{" "}
+                {stats.recentClicks === 1 ? "clique" : "cliques"} nos últimos
+                5 min
+              </>
+            ) : (
+              <span className="text-muted-foreground">
+                Sem cliques nos últimos 5 min
+              </span>
+            )}
+          </p>
+          <p className="text-[11px] text-muted-foreground">
+            {isLive ? (
+              <>
+                {stats.countries > 0 ? (
+                  <>
+                    {stats.countries}{" "}
+                    {stats.countries === 1 ? "país" : "países"} ·{" "}
+                  </>
+                ) : null}
+                {lastEventAgo
+                  ? `último: ${lastEventAgo}`
+                  : "ao vivo"}
+              </>
+            ) : lastEventAgo ? (
+              `último clique: ${lastEventAgo}`
+            ) : (
+              "aguardando primeiro clique"
+            )}
+          </p>
+        </div>
+      </div>
+      {isLive && stats.topActiveCodes.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {stats.topActiveCodes.map((c) => (
+            <span
+              key={c.code}
+              className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2 py-0.5 text-[11px] font-medium text-emerald-400"
+            >
+              <span className="font-mono">{c.code}</span>{" "}
+              <span className="opacity-70">×{c.clicks}</span>
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function formatRelativeTime(d: Date): string {
+  const diffSec = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (diffSec < 5) return "agora";
+  if (diffSec < 60) return `há ${diffSec}s`;
+  const min = Math.floor(diffSec / 60);
+  if (min < 60) return `há ${min}min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `há ${h}h`;
+  return `há ${Math.floor(h / 24)}d`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Heatmap dia × hora (Tier 2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const DOW_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+const HOUR_TICKS = [0, 6, 12, 18];
+
+function HeatmapCard({
+  matrix,
+  peak,
+}: {
+  matrix: number[][];
+  peak: number;
+}) {
+  // Encontra o pico (dow, hour) pra label "vendo mais às 21h domingo".
+  let peakDow = 0;
+  let peakHour = 0;
+  let total = 0;
+  for (let d = 0; d < 7; d++) {
+    for (let h = 0; h < 24; h++) {
+      const v = matrix[d]?.[h] ?? 0;
+      total += v;
+      if (v === peak && peak > 0) {
+        peakDow = d;
+        peakHour = h;
+      }
+    }
+  }
+
+  return (
+    <section className="rounded-lg border border-border bg-card p-4">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          Padrão semanal · dia × hora
+        </h2>
+        {peak > 0 ? (
+          <p className="text-xs text-muted-foreground">
+            Pico:{" "}
+            <span className="text-accent">
+              {DOW_LABELS[peakDow]} às {String(peakHour).padStart(2, "0")}h
+            </span>{" "}
+            ({peak} {peak === 1 ? "click" : "clicks"})
+          </p>
+        ) : null}
+      </div>
+      {total === 0 ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">
+          Sem dados de tráfego no período pra montar o heatmap.
+        </p>
+      ) : (
+        <div>
+          {/* Hour ticks no topo */}
+          <div className="grid grid-cols-[40px_repeat(24,minmax(0,1fr))] gap-[2px] pb-1">
+            <div />
+            {Array.from({ length: 24 }, (_, h) => (
+              <div
+                key={h}
+                className="text-center text-[9px] text-muted-foreground"
+              >
+                {HOUR_TICKS.includes(h) ? String(h).padStart(2, "0") : ""}
+              </div>
+            ))}
+          </div>
+          {DOW_LABELS.map((dowLabel, d) => (
+            <div
+              key={d}
+              className="grid grid-cols-[40px_repeat(24,minmax(0,1fr))] gap-[2px] py-[1px]"
+            >
+              <div className="flex items-center text-[10px] text-muted-foreground">
+                {dowLabel}
+              </div>
+              {Array.from({ length: 24 }, (_, h) => {
+                const v = matrix[d]?.[h] ?? 0;
+                const intensity = peak > 0 ? v / peak : 0;
+                return (
+                  <div
+                    key={h}
+                    title={`${dowLabel} ${String(h).padStart(2, "0")}h — ${v} ${
+                      v === 1 ? "click" : "clicks"
+                    }`}
+                    className="aspect-square rounded-[2px] border border-border/60"
+                    style={{
+                      backgroundColor:
+                        intensity === 0
+                          ? "transparent"
+                          : `rgba(201, 169, 75, ${0.15 + intensity * 0.85})`,
+                    }}
+                  />
+                );
+              })}
+            </div>
+          ))}
+          <div className="mt-3 flex items-center justify-end gap-2 text-[10px] text-muted-foreground">
+            <span>menos</span>
+            <div className="flex gap-[2px]">
+              {[0.15, 0.35, 0.55, 0.75, 1].map((a) => (
+                <div
+                  key={a}
+                  className="h-3 w-3 rounded-[2px] border border-border/60"
+                  style={{ backgroundColor: `rgba(201, 169, 75, ${a})` }}
+                />
+              ))}
+            </div>
+            <span>mais</span>
+          </div>
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            Horário de Brasília. Hover sobre cada célula pra ver o número
+            exato.
+          </p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Revenue chart (Pillar 3 v2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function RevenueChart({
+  data,
+}: {
+  data: ReportDataset["dailyRevenue"];
+}) {
+  const formatted = data.map((b) => ({
+    label: new Date(b.bucket).toLocaleDateString("pt-BR", {
+      day: "2-digit",
+      month: "short",
+      timeZone: "America/Sao_Paulo",
+    }),
+    revenue: b.revenueCents / 100,
+    sales: b.sales,
+  }));
+  const total = data.reduce((s, b) => s + b.revenueCents, 0);
+
+  return (
+    <section className="rounded-lg border border-border bg-card p-4">
+      <div className="mb-2 flex items-center justify-between">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          Receita por dia
+        </h2>
+        <span className="text-sm tabular-nums text-accent">
+          {(total / 100).toLocaleString("pt-BR", {
+            style: "currency",
+            currency: "BRL",
+          })}
+        </span>
+      </div>
+      <ResponsiveContainer width="100%" height={220}>
+        <BarChart data={formatted}>
+          <CartesianGrid stroke="#222" strokeDasharray="2 4" />
+          <XAxis
+            dataKey="label"
+            stroke="#666"
+            fontSize={11}
+            tickLine={false}
+          />
+          <YAxis
+            stroke="#666"
+            fontSize={11}
+            tickLine={false}
+            tickFormatter={(v: number) =>
+              v >= 1000 ? `R$${Math.round(v / 1000)}k` : `R$${v}`
+            }
+          />
+          <Tooltip
+            contentStyle={{
+              background: "#0F0F0F",
+              border: "1px solid #2A2A2A",
+              borderRadius: 6,
+              fontSize: 12,
+            }}
+            formatter={(value, name) => {
+              const num = typeof value === "number" ? value : 0;
+              if (name === "revenue") {
+                return [
+                  num.toLocaleString("pt-BR", {
+                    style: "currency",
+                    currency: "BRL",
+                  }),
+                  "Receita",
+                ];
+              }
+              return [num, "Vendas"];
+            }}
+          />
+          <Bar dataKey="revenue" fill={ACCENT} radius={[3, 3, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Top Revendedores (Pillar 3 v1+v2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function TopReferrersCard({
+  topReferrers,
+}: {
+  topReferrers: ReportDataset["topReferrers"];
+}) {
+  const fmtBRL = (cents: number) =>
+    (cents / 100).toLocaleString("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+      maximumFractionDigits: 0,
+    });
+  const hasAnyRevenue = topReferrers.some((r) => r.revenueCents > 0);
+
+  return (
+    <section className="rounded-lg border border-border bg-card p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-xs uppercase tracking-wide text-muted-foreground">
+          Top Revendedores
+        </h3>
+        <a
+          href="/revendedores"
+          className="text-xs text-accent hover:underline"
+        >
+          gerenciar →
+        </a>
+      </div>
+      {topReferrers.length === 0 ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">
+          Nenhum click com{" "}
+          <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+            ?ref=código
+          </code>{" "}
+          no período. Cadastra códigos em{" "}
+          <a href="/revendedores" className="text-accent hover:underline">
+            Revendedores
+          </a>{" "}
+          e usa os links gerados.
+        </p>
+      ) : (
+        <ul className="space-y-1.5">
+          {topReferrers.map((r, i) => (
+            <li
+              key={r.code}
+              className="rounded-md px-2 py-1.5 hover:bg-secondary/40"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    #{i + 1}
+                  </span>
+                  <span className="min-w-0 truncate">
+                    <span className="font-mono text-sm text-accent">
+                      {r.code}
+                    </span>
+                    {r.name ? (
+                      <span className="ml-2 text-sm text-foreground">
+                        · {r.name}
+                      </span>
+                    ) : (
+                      <span className="ml-2 text-xs italic text-muted-foreground">
+                        · não cadastrado
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div className="flex shrink-0 items-center gap-3 text-sm tabular-nums">
+                  <span className="text-foreground">
+                    {r.clicks.toLocaleString("pt-BR")}{" "}
+                    <span className="text-xs text-muted-foreground">
+                      cliques
+                    </span>
+                  </span>
+                  {r.sales > 0 ? (
+                    <>
+                      <span className="text-accent">
+                        {r.sales}{" "}
+                        <span className="text-xs text-accent/70">vendas</span>
+                      </span>
+                      <span className="font-semibold text-accent">
+                        {fmtBRL(r.revenueCents)}
+                      </span>
+                    </>
+                  ) : hasAnyRevenue ? (
+                    <span className="text-xs text-muted-foreground">
+                      sem vendas
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+              {r.sales > 0 ? (
+                <div className="ml-9 mt-1 text-[11px] text-muted-foreground">
+                  conversão {r.conversionRate}% · ticket médio{" "}
+                  {fmtBRL(Math.round(r.revenueCents / r.sales))}
+                </div>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

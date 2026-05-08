@@ -42,3 +42,5 @@ Thumbs.db
 
 # Claude Code persistent memory (per-session, não-projeto)
 .claude/
+
+.vercel

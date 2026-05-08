@@ -11,8 +11,10 @@
     "clean": "rimraf .next .turbo"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.95.1",
     "@radix-ui/react-label": "^2.1.8",
     "@radix-ui/react-slot": "^1.2.4",
+    "@source-authority/config": "workspace:*",
     "@source-authority/shared": "workspace:*",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.45.4",
@@ -26,6 +28,8 @@
     "react-simple-maps": "^3.0.0",
     "recharts": "^3.8.1",
     "server-only": "^0.0.1",
+    "sharp": "^0.34.5",
+    "stripe": "^17.7.0",
     "tailwind-merge": "^2.5.4",
     "tailwindcss-animate": "^1.0.7",
     "world-atlas": "^2.0.2",

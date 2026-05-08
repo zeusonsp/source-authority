@@ -4,8 +4,10 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import {
+  forgotPasswordSchema,
   loginSchema,
   resendConfirmationSchema,
+  resetPasswordSchema,
   signupSchema,
 } from "@/lib/auth/schemas";
 import type { AuthState } from "@/lib/auth/types";
@@ -122,4 +124,97 @@ export async function resendConfirmation(
     success: true,
     message: "Reenviamos o link. Verifique seu e-mail.",
   };
+}
+
+/**
+ * Dispara link de redefinição de senha via Supabase Auth.
+ * Email vai pelo SMTP custom (Resend, configurado no Supabase Dashboard).
+ *
+ * Privacy: ignoramos o resultado real (mesmo padrão de signup —
+ * não vaza enumeration de e-mails cadastrados).
+ *
+ * Link redireciona pra /auth/callback?next=/reset-password — handler
+ * existente troca o code por session, depois redirect pra reset-password
+ * onde usuário define a senha nova.
+ */
+export async function requestPasswordReset(
+  _prev: AuthState,
+  formData: FormData,
+): Promise<AuthState> {
+  const parsed = forgotPasswordSchema.safeParse({
+    email: formData.get("email"),
+  });
+
+  if (!parsed.success) {
+    return { errors: parsed.error.flatten().fieldErrors };
+  }
+
+  const supabase = createClient();
+  const headerList = headers();
+  const origin =
+    headerList.get("origin") ??
+    process.env.NEXT_PUBLIC_APP_URL ??
+    "http://localhost:3000";
+
+  await supabase.auth.resetPasswordForEmail(parsed.data.email, {
+    redirectTo: `${origin}/auth/callback?next=/reset-password`,
+  });
+
+  return {
+    success: true,
+    email: parsed.data.email,
+    message: `Se ${parsed.data.email} estiver cadastrado, enviamos um link de redefinição. Confira sua caixa de entrada e o spam.`,
+  };
+}
+
+/**
+ * Atualiza senha do usuário autenticado. Usado em /reset-password
+ * (após callback que estabeleceu sessão a partir do link de recovery).
+ *
+ * Se sessão expirou (link velho ou já consumido), retorna erro pra UI
+ * sugerir solicitar novo link.
+ */
+export async function updatePassword(
+  _prev: AuthState,
+  formData: FormData,
+): Promise<AuthState> {
+  const parsed = resetPasswordSchema.safeParse({
+    password: formData.get("password"),
+    confirm_password: formData.get("confirm_password"),
+  });
+
+  if (!parsed.success) {
+    return { errors: parsed.error.flatten().fieldErrors };
+  }
+
+  const supabase = createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return {
+      errors: {
+        _form: [
+          "Sessão expirada. Solicite um novo link em /forgot-password.",
+        ],
+      },
+    };
+  }
+
+  const { error } = await supabase.auth.updateUser({
+    password: parsed.data.password,
+  });
+
+  if (error) {
+    return {
+      errors: {
+        _form: ["Não foi possível redefinir a senha. Tente novamente."],
+      },
+    };
+  }
+
+  revalidatePath("/", "layout");
+  redirect("/dashboard");
 }

@@ -1,0 +1,12 @@
+{
+  "name": "@source-authority/config",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    "./tailwind": "./tailwind.preset.ts"
+  },
+  "peerDependencies": {
+    "tailwindcss": "^3.4.0",
+    "tailwindcss-animate": "^1.0.0"
+  }
+}

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://sourceauthority.com.br/sitemap.xml

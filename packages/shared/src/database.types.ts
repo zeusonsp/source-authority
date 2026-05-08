@@ -14,6 +14,133 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_analyses: {
+        Row: {
+          analyzed_at: string
+          analyzed_by: string | null
+          company_id: string
+          confidence: number | null
+          content_id: string | null
+          cost_micro_usd: number | null
+          id: string
+          input_tokens: number | null
+          model: string
+          output_tokens: number | null
+          reasoning: string | null
+          suspect_thumbnail_url: string | null
+          suspect_url: string
+          verdict: string
+        }
+        Insert: {
+          analyzed_at?: string
+          analyzed_by?: string | null
+          company_id: string
+          confidence?: number | null
+          content_id?: string | null
+          cost_micro_usd?: number | null
+          id?: string
+          input_tokens?: number | null
+          model: string
+          output_tokens?: number | null
+          reasoning?: string | null
+          suspect_thumbnail_url?: string | null
+          suspect_url: string
+          verdict: string
+        }
+        Update: {
+          analyzed_at?: string
+          analyzed_by?: string | null
+          company_id?: string
+          confidence?: number | null
+          content_id?: string | null
+          cost_micro_usd?: number | null
+          id?: string
+          input_tokens?: number | null
+          model?: string
+          output_tokens?: number | null
+          reasoning?: string | null
+          suspect_thumbnail_url?: string | null
+          suspect_url?: string
+          verdict?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_analyses_analyzed_by_fkey"
+            columns: ["analyzed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_analyses_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_analyses_content_id_fkey"
+            columns: ["content_id"]
+            isOneToOne: false
+            referencedRelation: "contents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      alerts: {
+        Row: {
+          company_id: string
+          created_at: string
+          data: Json
+          id: string
+          severity: string
+          source: string
+          status: string
+          triaged_at: string | null
+          triaged_by: string | null
+          type: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          data?: Json
+          id?: string
+          severity?: string
+          source: string
+          status?: string
+          triaged_at?: string | null
+          triaged_by?: string | null
+          type: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          data?: Json
+          id?: string
+          severity?: string
+          source?: string
+          status?: string
+          triaged_at?: string | null
+          triaged_by?: string | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alerts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "alerts_triaged_by_fkey"
+            columns: ["triaged_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_log: {
         Row: {
           action: string
@@ -58,42 +185,66 @@ export type Database = {
       }
       companies: {
         Row: {
+          billing_exempt: boolean
+          billing_status: string
           cnpj: string | null
           created_at: string
           created_by: string | null
           default_redirect_url: string | null
           id: string
           name: string
+          owned_domains: string[]
           plan: string
+          plan_renewed_at: string | null
+          protected_brand_terms: string[]
           segment: string | null
           size: string | null
           slug: string
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          trial_ends_at: string | null
           updated_at: string
         }
         Insert: {
+          billing_exempt?: boolean
+          billing_status?: string
           cnpj?: string | null
           created_at?: string
           created_by?: string | null
           default_redirect_url?: string | null
           id?: string
           name: string
+          owned_domains?: string[]
           plan?: string
+          plan_renewed_at?: string | null
+          protected_brand_terms?: string[]
           segment?: string | null
           size?: string | null
           slug: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          trial_ends_at?: string | null
           updated_at?: string
         }
         Update: {
+          billing_exempt?: boolean
+          billing_status?: string
           cnpj?: string | null
           created_at?: string
           created_by?: string | null
           default_redirect_url?: string | null
           id?: string
           name?: string
+          owned_domains?: string[]
           plan?: string
+          plan_renewed_at?: string | null
+          protected_brand_terms?: string[]
           segment?: string | null
           size?: string | null
           slug?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          trial_ends_at?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -106,39 +257,303 @@ export type Database = {
           },
         ]
       }
-      events: {
+      contents: {
         Row: {
           company_id: string
-          created_at: string
-          device: string | null
+          duration_seconds: number | null
+          external_id: string | null
           id: string
-          ip_city: string | null
-          ip_country: string | null
-          lang: string | null
-          referrer: string | null
-          user_agent: string | null
+          notes: string | null
+          registered_at: string
+          registered_by: string | null
+          source_platform: string
+          source_url: string
+          status: string
+          status_detail: string | null
+          thumbnail_dhash: string | null
+          thumbnail_url: string | null
+          title: string | null
         }
         Insert: {
           company_id: string
-          created_at?: string
-          device?: string | null
+          duration_seconds?: number | null
+          external_id?: string | null
           id?: string
-          ip_city?: string | null
-          ip_country?: string | null
-          lang?: string | null
-          referrer?: string | null
-          user_agent?: string | null
+          notes?: string | null
+          registered_at?: string
+          registered_by?: string | null
+          source_platform: string
+          source_url: string
+          status?: string
+          status_detail?: string | null
+          thumbnail_dhash?: string | null
+          thumbnail_url?: string | null
+          title?: string | null
         }
         Update: {
           company_id?: string
+          duration_seconds?: number | null
+          external_id?: string | null
+          id?: string
+          notes?: string | null
+          registered_at?: string
+          registered_by?: string | null
+          source_platform?: string
+          source_url?: string
+          status?: string
+          status_detail?: string | null
+          thumbnail_dhash?: string | null
+          thumbnail_url?: string | null
+          title?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contents_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contents_registered_by_fkey"
+            columns: ["registered_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      conversions: {
+        Row: {
+          amount_cents: number
+          company_id: string
+          created_at: string
+          currency: string
+          external_id: string
+          id: string
+          occurred_at: string
+          reseller_code: string | null
+          session_id: string | null
+          source_event_id: string | null
+        }
+        Insert: {
+          amount_cents: number
+          company_id: string
+          created_at?: string
+          currency?: string
+          external_id: string
+          id?: string
+          occurred_at?: string
+          reseller_code?: string | null
+          session_id?: string | null
+          source_event_id?: string | null
+        }
+        Update: {
+          amount_cents?: number
+          company_id?: string
+          created_at?: string
+          currency?: string
+          external_id?: string
+          id?: string
+          occurred_at?: string
+          reseller_code?: string | null
+          session_id?: string | null
+          source_event_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversions_source_event_id_fkey"
+            columns: ["source_event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      demo_leads: {
+        Row: {
+          company: string | null
+          created_at: string
+          email: string
+          employees: string
+          id: string
+          ip_address: string | null
+          name: string
+          phone: string | null
+          referrer: string | null
+          use_case: string | null
+          user_agent: string | null
+          utm_campaign: string | null
+          utm_content: string | null
+          utm_medium: string | null
+          utm_source: string | null
+          utm_term: string | null
+        }
+        Insert: {
+          company?: string | null
+          created_at?: string
+          email: string
+          employees: string
+          id?: string
+          ip_address?: string | null
+          name: string
+          phone?: string | null
+          referrer?: string | null
+          use_case?: string | null
+          user_agent?: string | null
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
+        }
+        Update: {
+          company?: string | null
+          created_at?: string
+          email?: string
+          employees?: string
+          id?: string
+          ip_address?: string | null
+          name?: string
+          phone?: string | null
+          referrer?: string | null
+          use_case?: string | null
+          user_agent?: string | null
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
+        }
+        Relationships: []
+      }
+      events: {
+        Row: {
+          browser_name: string | null
+          browser_version: string | null
+          color_depth: number | null
+          company_id: string
+          created_at: string
+          device: string | null
+          device_model: string | null
+          device_pixel_ratio: number | null
+          device_vendor: string | null
+          id: string
+          ip_asn: number | null
+          ip_city: string | null
+          ip_continent: string | null
+          ip_country: string | null
+          ip_latitude: number | null
+          ip_longitude: number | null
+          ip_organization: string | null
+          ip_postal_code: string | null
+          ip_region: string | null
+          ip_timezone: string | null
+          lang: string | null
+          network_type: string | null
+          os_name: string | null
+          os_version: string | null
+          referrer: string | null
+          referrer_code: string | null
+          screen_height: number | null
+          screen_width: number | null
+          session_id: string | null
+          url_path: string | null
+          user_agent: string | null
+          utm_campaign: string | null
+          utm_content: string | null
+          utm_medium: string | null
+          utm_source: string | null
+          utm_term: string | null
+          viewport_height: number | null
+          viewport_width: number | null
+        }
+        Insert: {
+          browser_name?: string | null
+          browser_version?: string | null
+          color_depth?: number | null
+          company_id: string
           created_at?: string
           device?: string | null
+          device_model?: string | null
+          device_pixel_ratio?: number | null
+          device_vendor?: string | null
           id?: string
+          ip_asn?: number | null
           ip_city?: string | null
+          ip_continent?: string | null
           ip_country?: string | null
+          ip_latitude?: number | null
+          ip_longitude?: number | null
+          ip_organization?: string | null
+          ip_postal_code?: string | null
+          ip_region?: string | null
+          ip_timezone?: string | null
           lang?: string | null
+          network_type?: string | null
+          os_name?: string | null
+          os_version?: string | null
           referrer?: string | null
+          referrer_code?: string | null
+          screen_height?: number | null
+          screen_width?: number | null
+          session_id?: string | null
+          url_path?: string | null
           user_agent?: string | null
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
+          viewport_height?: number | null
+          viewport_width?: number | null
+        }
+        Update: {
+          browser_name?: string | null
+          browser_version?: string | null
+          color_depth?: number | null
+          company_id?: string
+          created_at?: string
+          device?: string | null
+          device_model?: string | null
+          device_pixel_ratio?: number | null
+          device_vendor?: string | null
+          id?: string
+          ip_asn?: number | null
+          ip_city?: string | null
+          ip_continent?: string | null
+          ip_country?: string | null
+          ip_latitude?: number | null
+          ip_longitude?: number | null
+          ip_organization?: string | null
+          ip_postal_code?: string | null
+          ip_region?: string | null
+          ip_timezone?: string | null
+          lang?: string | null
+          network_type?: string | null
+          os_name?: string | null
+          os_version?: string | null
+          referrer?: string | null
+          referrer_code?: string | null
+          screen_height?: number | null
+          screen_width?: number | null
+          session_id?: string | null
+          url_path?: string | null
+          user_agent?: string | null
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
+          viewport_height?: number | null
+          viewport_width?: number | null
         }
         Relationships: [
           {
@@ -146,6 +561,120 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      hashtag_watches: {
+        Row: {
+          active: boolean
+          company_id: string
+          created_at: string
+          created_by: string | null
+          hashtag: string
+          id: string
+          ig_hashtag_id: string | null
+          last_polled_at: string | null
+          last_post_cursor: string | null
+        }
+        Insert: {
+          active?: boolean
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          hashtag: string
+          id?: string
+          ig_hashtag_id?: string | null
+          last_polled_at?: string | null
+          last_post_cursor?: string | null
+        }
+        Update: {
+          active?: boolean
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          hashtag?: string
+          id?: string
+          ig_hashtag_id?: string | null
+          last_polled_at?: string | null
+          last_post_cursor?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hashtag_watches_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hashtag_watches_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      instagram_connections: {
+        Row: {
+          access_token: string
+          company_id: string
+          connected_at: string
+          connected_by: string | null
+          fb_page_id: string | null
+          fb_page_name: string | null
+          granted_scopes: string[] | null
+          id: string
+          ig_user_id: string
+          ig_username: string | null
+          last_polled_at: string | null
+          status: string
+          token_expires_at: string | null
+        }
+        Insert: {
+          access_token: string
+          company_id: string
+          connected_at?: string
+          connected_by?: string | null
+          fb_page_id?: string | null
+          fb_page_name?: string | null
+          granted_scopes?: string[] | null
+          id?: string
+          ig_user_id: string
+          ig_username?: string | null
+          last_polled_at?: string | null
+          status?: string
+          token_expires_at?: string | null
+        }
+        Update: {
+          access_token?: string
+          company_id?: string
+          connected_at?: string
+          connected_by?: string | null
+          fb_page_id?: string | null
+          fb_page_name?: string | null
+          granted_scopes?: string[] | null
+          id?: string
+          ig_user_id?: string
+          ig_username?: string | null
+          last_polled_at?: string | null
+          status?: string
+          token_expires_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "instagram_connections_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: true
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "instagram_connections_connected_by_fkey"
+            columns: ["connected_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -226,11 +755,113 @@ export type Database = {
         }
         Relationships: []
       }
+      reseller_codes: {
+        Row: {
+          code: string
+          company_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+          notes: string | null
+        }
+        Insert: {
+          code: string
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+        }
+        Update: {
+          code?: string
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reseller_codes_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reseller_codes_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subscription_events: {
+        Row: {
+          company_id: string | null
+          created_at: string
+          event_type: string
+          id: string
+          payload: Json
+          payment_provider: string
+          processed_at: string | null
+          provider_event_id: string
+        }
+        Insert: {
+          company_id?: string | null
+          created_at?: string
+          event_type: string
+          id?: string
+          payload?: Json
+          payment_provider?: string
+          processed_at?: string | null
+          provider_event_id: string
+        }
+        Update: {
+          company_id?: string | null
+          created_at?: string
+          event_type?: string
+          id?: string
+          payload?: Json
+          payment_provider?: string
+          processed_at?: string | null
+          provider_event_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_events_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      apply_subscription_event: {
+        Args: {
+          _company_id: string
+          _event_type: string
+          _new_plan?: string
+          _new_status?: string
+          _payload: Json
+          _provider: string
+          _provider_event_id: string
+          _renewed_at?: string
+          _stripe_customer_id?: string
+          _stripe_sub_id?: string
+          _trial_ends_at?: string
+        }
+        Returns: string
+      }
       create_company: {
         Args: {
           _cnpj?: string
@@ -246,6 +877,10 @@ export type Database = {
       is_slug_available: { Args: { _slug: string }; Returns: boolean }
       log_audit_event: {
         Args: { _action: string; _company_id: string; _payload?: Json }
+        Returns: string
+      }
+      triage_alert: {
+        Args: { _alert_id: string; _new_status: string; _note?: string }
         Returns: string
       }
       update_company: {

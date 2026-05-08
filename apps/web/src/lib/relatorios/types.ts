@@ -56,11 +56,23 @@ export type ReportDataset = {
     last24h: number;
     countries: number;
     activeDays: number;
+    /** Pillar 3 v2 — número de conversões (vendas) no período. */
+    conversions: number;
+    /** Pillar 3 v2 — soma de amount_cents das conversões (BRL). */
+    revenueCents: number;
+    /** Conversion rate em pct (sales/clicks * 100). 0 se total=0. */
+    conversionRate: number;
+    /** Avg order value em centavos. 0 se conversions=0. */
+    aovCents: number;
+    /** % de conversões com reseller_code atribuído. */
+    attributedPct: number;
   };
   /** 24 buckets (uma por hora) das últimas 24h. Zero-fill incluído. */
   hourly: Bucket[];
   /** N buckets (um por dia) cobrindo todo o range. Zero-fill incluído. */
   daily: Bucket[];
+  /** Pillar 3 v2 — receita por dia (centavos). Mesma escala de bucket que daily. */
+  dailyRevenue: RevenueBucket[];
   /** Top 50 países por cliques, decrescente. */
   topCountries: CountryCount[];
   byDevice: DeviceCount[];
@@ -68,6 +80,54 @@ export type ReportDataset = {
   byLang: LabeledCount[];
   /** Top 10 origens (domínio extraído do referrer; 'direto' se null). */
   byReferrer: LabeledCount[];
+  /**
+   * Pillar 3 v1+v2 — Top revendedores por receita > cliques.
+   * Cada item junta o `referrer_code` com o `name` cadastrado em
+   * /revendedores. Inclui sales + revenue + conversionRate.
+   * Ordem: receita desc → clicks desc. Top 10.
+   */
+  topReferrers: ReferrerCount[];
+  /**
+   * Tier 2 — KPIs do período anterior (mesma duração, imediatamente
+   * antes de range.from). NULL se não há dados ou período não cobrível
+   * (ex: range customizado super antigo). UI computa deltas no client.
+   */
+  kpisPrevious: ReportDataset["kpis"] | null;
+  /**
+   * Tier 2 — heatmap 7×24 de clicks por (dia da semana × hora do dia)
+   * em BRT (UTC-3). Útil pra detectar padrões temporais ("vendo mais
+   * domingo 21h") e otimizar timing de posts.
+   *
+   * heatmap[dow][hour] = clicks. dow: 0=Dom .. 6=Sáb. hour: 0-23.
+   */
+  heatmap: number[][];
+  /** Pico (maior valor no grid) — usado pra normalizar cores no client. */
+  heatmapPeak: number;
+};
+
+export type RevenueBucket = {
+  /** YYYY-MM-DD UTC. */
+  bucket: string;
+  /** Centavos. */
+  revenueCents: number;
+  /** Vendas no dia. */
+  sales: number;
+};
+
+export type ReferrerCount = {
+  /** Code raw como veio na URL (ex: 'ana', 'instagram'). */
+  code: string;
+  /** Nome amigável (do reseller_codes.name). null = não cadastrado. */
+  name: string | null;
+  clicks: number;
+  /** Percentual de clicks sobre total de events com referrer_code (0-100). */
+  pct: number;
+  /** Pillar 3 v2 — vendas atribuídas. */
+  sales: number;
+  /** Pillar 3 v2 — receita total em centavos (BRL). */
+  revenueCents: number;
+  /** Pillar 3 v2 — conversion rate em pct (sales/clicks * 100). */
+  conversionRate: number;
 };
 
 /** Subset das colunas de events que precisamos pra agregar. */
@@ -77,4 +137,13 @@ export type EventForAggregation = {
   device: string | null;
   lang: string | null;
   referrer: string | null;
+  /** Pillar 3 v1 — código de revendedor capturado pelo tracker. */
+  referrer_code: string | null;
+};
+
+/** Subset das colunas de conversions que precisamos pra agregar. */
+export type ConversionForAggregation = {
+  occurred_at: string;
+  amount_cents: number;
+  reseller_code: string | null;
 };

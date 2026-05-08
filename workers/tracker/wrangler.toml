@@ -1,12 +1,18 @@
 # source-authority-tracker — Worker do link mestre.
 #
 # Resolve oficial.sourceauthority.com.br/[slug] → 302 pra URL destino,
-# registrando o clique em events. MVP: hospedado no subdomínio gratuito
-# .workers.dev. Custom domain entra quando saírem da dogfood.
+# registrando o clique em events.
 
 name = "source-authority-tracker"
 main = "src/index.ts"
 compatibility_date = "2026-05-05"
+
+# Custom domain — CF auto-cria DNS + bind quando deployamos.
+# Pretty URL pro link mestre: https://oficial.sourceauthority.com.br/<slug>
+# em vez do .workers.dev (que continua funcionando como fallback).
+routes = [
+  { pattern = "oficial.sourceauthority.com.br", custom_domain = true }
+]
 
 # Logs estruturados em produção via dashboard Cloudflare.
 [observability]

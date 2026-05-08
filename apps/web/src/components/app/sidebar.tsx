@@ -2,10 +2,13 @@
 
 import {
   Bell,
+  Copy,
   FileBarChart,
   LayoutDashboard,
   Link2,
   Settings,
+  Stethoscope,
+  Users,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -38,12 +41,30 @@ const NAV_ITEMS: readonly NavItem[] = [
     href: "/alertas",
     label: "Alertas",
     icon: Bell,
-    badge: "Fase 5",
+    badge: null,
+  },
+  {
+    href: "/meu-conteudo",
+    label: "Meu Conteúdo",
+    icon: Copy,
+    badge: null,
   },
   {
     href: "/relatorios",
     label: "Relatórios",
     icon: FileBarChart,
+    badge: null,
+  },
+  {
+    href: "/revendedores",
+    label: "Revendedores",
+    icon: Users,
+    badge: null,
+  },
+  {
+    href: "/diagnostico",
+    label: "Diagnóstico",
+    icon: Stethoscope,
     badge: null,
   },
   {
