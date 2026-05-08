@@ -1,6 +1,10 @@
 import { redirect } from "next/navigation";
 import { requireAuth } from "@/lib/auth/server";
-import { aggregate, resolveRange } from "@/lib/relatorios/aggregations";
+import {
+  aggregate,
+  previousRange,
+  resolveRange,
+} from "@/lib/relatorios/aggregations";
 import { createClient } from "@/lib/supabase/server";
 import { RelatoriosClient } from "./relatorios-client";
 
@@ -70,6 +74,41 @@ export default async function RelatoriosPage({ searchParams }: PageProps) {
       reseller_code: c.reseller_code,
     })),
   );
+
+  // Tier 2 — fetch previous period (mesma duração, imediatamente antes)
+  // pra computar deltas em KpiGrid. Single shot — agrega só os KPIs.
+  const prev = previousRange(range);
+  const [{ data: prevEvents }, { data: prevConversions }] = await Promise.all([
+    supabase
+      .from("events")
+      .select(
+        "created_at, ip_country, device, lang, referrer, referrer_code",
+      )
+      .eq("company_id", membership.company_id)
+      .gte("created_at", prev.from)
+      .lte("created_at", prev.to),
+    supabase
+      .from("conversions")
+      .select("occurred_at, amount_cents, reseller_code")
+      .eq("company_id", membership.company_id)
+      .gte("occurred_at", prev.from)
+      .lte("occurred_at", prev.to),
+  ]);
+
+  const prevData = aggregate(
+    prev,
+    prevEvents ?? [],
+    resellerNamesByCode,
+    (prevConversions ?? []).map((c) => ({
+      occurred_at: c.occurred_at,
+      amount_cents: Number(c.amount_cents),
+      reseller_code: c.reseller_code,
+    })),
+  );
+
+  // Anexa kpis do prev no dataset principal (UI só precisa disso, não
+  // de toda a árvore agregada do período anterior).
+  data.kpisPrevious = prevData.kpis;
 
   return (
     <div className="container py-8">

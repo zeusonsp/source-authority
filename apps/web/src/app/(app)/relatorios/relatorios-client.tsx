@@ -66,7 +66,7 @@ export function RelatoriosClient({ data }: Props) {
         <EmptyState />
       ) : (
         <>
-          <KpiGrid kpis={data.kpis} />
+          <KpiGrid kpis={data.kpis} kpisPrevious={data.kpisPrevious} />
           <HourlyChart data={data.hourly} />
           <DailyChart data={data.daily} />
           {data.kpis.conversions > 0 ? (
@@ -186,7 +186,88 @@ function DateRangeBar({ range }: { range: ReportDataset["range"] }) {
 // KPI grid + empty
 // ─────────────────────────────────────────────────────────────────────────────
 
-function KpiGrid({ kpis }: { kpis: ReportDataset["kpis"] }) {
+/**
+ * Tier 2 — Delta indicator pill com seta + cor baseada em mudança vs
+ * período anterior. Se previous=0 e current>0, mostra "novo". Se ambos
+ * 0, mostra nada (return null).
+ *
+ * Para deltas em PONTOS (taxa de conversão, atribuição %), passa
+ * `inPoints=true`: mostra "+2.3pp" em vez de "+45%".
+ */
+type DeltaIntent = "positive" | "negative" | "neutral";
+
+function computeDelta(
+  current: number,
+  previous: number,
+  /** Se true, retorna delta em pontos (current - previous), não pct. */
+  inPoints = false,
+): { value: string; intent: DeltaIntent } | null {
+  // Sem dados pra comparar.
+  if (previous === 0 && current === 0) return null;
+  if (previous === 0 && current > 0) {
+    return { value: "novo", intent: "positive" };
+  }
+  if (previous > 0 && current === 0) {
+    return { value: "—100%", intent: "negative" };
+  }
+
+  if (inPoints) {
+    const diff = current - previous;
+    const sign = diff > 0 ? "+" : diff < 0 ? "−" : "";
+    return {
+      value: `${sign}${Math.abs(diff).toFixed(1)}pp`,
+      intent: diff > 0 ? "positive" : diff < 0 ? "negative" : "neutral",
+    };
+  }
+
+  const pct = ((current - previous) / previous) * 100;
+  const rounded = Math.round(pct * 10) / 10;
+  const sign = rounded > 0 ? "+" : rounded < 0 ? "−" : "";
+  return {
+    value: `${sign}${Math.abs(rounded)}%`,
+    intent:
+      rounded > 0 ? "positive" : rounded < 0 ? "negative" : "neutral",
+  };
+}
+
+function DeltaPill({
+  delta,
+}: {
+  delta: ReturnType<typeof computeDelta>;
+}) {
+  if (!delta) return null;
+  const colorClass =
+    delta.intent === "positive"
+      ? "text-emerald-400"
+      : delta.intent === "negative"
+        ? "text-rose-400/70"
+        : "text-muted-foreground";
+  const arrow =
+    delta.intent === "positive"
+      ? "↑"
+      : delta.intent === "negative"
+        ? "↓"
+        : "·";
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-0.5 text-[11px] font-medium tabular-nums",
+        colorClass,
+      )}
+    >
+      <span>{arrow}</span>
+      <span>{delta.value}</span>
+    </span>
+  );
+}
+
+function KpiGrid({
+  kpis,
+  kpisPrevious,
+}: {
+  kpis: ReportDataset["kpis"];
+  kpisPrevious: ReportDataset["kpisPrevious"];
+}) {
   const fmtBRL = (cents: number) =>
     (cents / 100).toLocaleString("pt-BR", {
       style: "currency",
@@ -195,12 +276,26 @@ function KpiGrid({ kpis }: { kpis: ReportDataset["kpis"] }) {
     });
   const fmtN = (n: number) => n.toLocaleString("pt-BR");
 
-  const trafficCards = [
-    { label: "Cliques", value: fmtN(kpis.total) },
-    { label: "Últimas 24h", value: fmtN(kpis.last24h) },
-    { label: "Países", value: fmtN(kpis.countries) },
-    { label: "Dias com cliques", value: fmtN(kpis.activeDays) },
-  ];
+  // Compute deltas só se temos kpisPrevious. Tráfego: pct delta. KPIs
+  // que já são em pct (taxa de conversão, atribuição %): pp delta.
+  const dTotal = kpisPrevious
+    ? computeDelta(kpis.total, kpisPrevious.total)
+    : null;
+  const dCountries = kpisPrevious
+    ? computeDelta(kpis.countries, kpisPrevious.countries)
+    : null;
+  const dRevenue = kpisPrevious
+    ? computeDelta(kpis.revenueCents, kpisPrevious.revenueCents)
+    : null;
+  const dSales = kpisPrevious
+    ? computeDelta(kpis.conversions, kpisPrevious.conversions)
+    : null;
+  const dConvRate = kpisPrevious
+    ? computeDelta(kpis.conversionRate, kpisPrevious.conversionRate, true)
+    : null;
+  const dAOV = kpisPrevious
+    ? computeDelta(kpis.aovCents, kpisPrevious.aovCents)
+    : null;
 
   // Pillar 3 v2 — só mostra cards de receita se houver pelo menos 1
   // conversão no período (evita ruído visual quando empresa ainda não
@@ -213,17 +308,23 @@ function KpiGrid({ kpis }: { kpis: ReportDataset["kpis"] }) {
         aria-label="KPIs de tráfego"
         className="grid grid-cols-2 gap-3 md:grid-cols-4"
       >
-        {trafficCards.map((c) => (
-          <div
-            key={c.label}
-            className="rounded-lg border border-border bg-card p-4"
-          >
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
-              {c.label}
-            </p>
-            <p className="mt-2 text-2xl font-semibold tabular-nums">{c.value}</p>
-          </div>
-        ))}
+        <KpiCard
+          label="Cliques"
+          value={fmtN(kpis.total)}
+          delta={dTotal}
+          deltaHint={
+            kpisPrevious
+              ? `vs ${fmtN(kpisPrevious.total)} no período anterior`
+              : null
+          }
+        />
+        <KpiCard label="Últimas 24h" value={fmtN(kpis.last24h)} />
+        <KpiCard
+          label="Países"
+          value={fmtN(kpis.countries)}
+          delta={dCountries}
+        />
+        <KpiCard label="Dias com cliques" value={fmtN(kpis.activeDays)} />
       </section>
 
       {hasRevenue ? (
@@ -231,49 +332,89 @@ function KpiGrid({ kpis }: { kpis: ReportDataset["kpis"] }) {
           aria-label="KPIs de receita"
           className="grid grid-cols-2 gap-3 md:grid-cols-4"
         >
-          <div className="rounded-lg border border-accent/40 bg-accent/5 p-4">
-            <p className="text-xs uppercase tracking-wide text-accent">
-              Receita
-            </p>
-            <p className="mt-2 text-2xl font-semibold tabular-nums text-accent">
-              {fmtBRL(kpis.revenueCents)}
-            </p>
-          </div>
-          <div className="rounded-lg border border-border bg-card p-4">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
-              Vendas
-            </p>
-            <p className="mt-2 text-2xl font-semibold tabular-nums">
-              {fmtN(kpis.conversions)}
-            </p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              {kpis.attributedPct}% atribuídas a revendedor
-            </p>
-          </div>
-          <div className="rounded-lg border border-border bg-card p-4">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
-              Taxa de conversão
-            </p>
-            <p className="mt-2 text-2xl font-semibold tabular-nums">
-              {kpis.conversionRate}%
-            </p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              vendas / cliques no período
-            </p>
-          </div>
-          <div className="rounded-lg border border-border bg-card p-4">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
-              Ticket médio
-            </p>
-            <p className="mt-2 text-2xl font-semibold tabular-nums">
-              {fmtBRL(kpis.aovCents)}
-            </p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              receita / vendas
-            </p>
-          </div>
+          <KpiCard
+            label="Receita"
+            value={fmtBRL(kpis.revenueCents)}
+            accent
+            delta={dRevenue}
+            deltaHint={
+              kpisPrevious
+                ? `vs ${fmtBRL(kpisPrevious.revenueCents)}`
+                : null
+            }
+          />
+          <KpiCard
+            label="Vendas"
+            value={fmtN(kpis.conversions)}
+            delta={dSales}
+            footnote={`${kpis.attributedPct}% atribuídas a revendedor`}
+          />
+          <KpiCard
+            label="Taxa de conversão"
+            value={`${kpis.conversionRate}%`}
+            delta={dConvRate}
+            footnote="vendas / cliques no período"
+          />
+          <KpiCard
+            label="Ticket médio"
+            value={fmtBRL(kpis.aovCents)}
+            delta={dAOV}
+            footnote="receita / vendas"
+          />
         </section>
       ) : null}
+    </div>
+  );
+}
+
+function KpiCard({
+  label,
+  value,
+  accent = false,
+  delta = null,
+  deltaHint = null,
+  footnote = null,
+}: {
+  label: string;
+  value: string;
+  accent?: boolean;
+  delta?: ReturnType<typeof computeDelta>;
+  deltaHint?: string | null;
+  footnote?: string | null;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-lg border p-4",
+        accent
+          ? "border-accent/40 bg-accent/5"
+          : "border-border bg-card",
+      )}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <p
+          className={cn(
+            "text-xs uppercase tracking-wide",
+            accent ? "text-accent" : "text-muted-foreground",
+          )}
+        >
+          {label}
+        </p>
+        <DeltaPill delta={delta} />
+      </div>
+      <p
+        className={cn(
+          "mt-2 text-2xl font-semibold tabular-nums",
+          accent ? "text-accent" : undefined,
+        )}
+      >
+        {value}
+      </p>
+      {(footnote || deltaHint) && (
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          {footnote ?? deltaHint}
+        </p>
+      )}
     </div>
   );
 }
