@@ -75,16 +75,16 @@ export default async function DiagnosticoPage() {
         <Alert>
           <AlertDescription className="space-y-2 text-xs leading-relaxed">
             <p>
-              <strong>Como testar:</strong> click em "Testar tracking" abaixo
-              → uma nova aba abre o link mestre → você é redirecionado pro
-              site da empresa → volta nessa aba e click em "Atualizar" pra
-              ver os dados capturados na sua visita.
+              <strong>Como testar:</strong> click em &ldquo;Testar
+              tracking&rdquo; abaixo → uma nova aba abre o link mestre → você
+              é redirecionado pro site da empresa → volta nessa aba e click
+              em &ldquo;Atualizar&rdquo; pra ver os dados capturados na sua
+              visita.
             </p>
           </AlertDescription>
         </Alert>
 
         <DiagnosticoClient
-          companySlug={company.slug}
           totalEvents={count ?? 0}
           masterLink={trackerUrl(company.slug)}
           latestEvent={latestEvent}

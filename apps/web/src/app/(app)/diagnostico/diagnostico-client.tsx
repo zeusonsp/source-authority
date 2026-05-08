@@ -10,7 +10,6 @@ import { cn } from "@/lib/utils";
 type EventRow = Record<string, unknown> | null;
 
 type Props = {
-  companySlug: string;
   totalEvents: number;
   masterLink: string;
   latestEvent: EventRow;
@@ -116,7 +115,6 @@ function formatValue(key: string, value: unknown, raw: EventRow): string {
 }
 
 export function DiagnosticoClient({
-  companySlug,
   totalEvents,
   masterLink,
   latestEvent,
@@ -204,8 +202,8 @@ export function DiagnosticoClient({
 
         {!latestEvent ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            Sem eventos ainda. Click em "Testar tracking" pra gerar o
-            primeiro.
+            Sem eventos ainda. Click em &ldquo;Testar tracking&rdquo; pra
+            gerar o primeiro.
           </p>
         ) : showRaw ? (
           <pre className="overflow-x-auto rounded border border-border bg-background/40 p-3 text-[11px] leading-relaxed">
@@ -349,7 +347,7 @@ export function DiagnosticoClient({
         <div className="md:col-span-2 rounded-lg border border-border bg-background/40 p-4">
           <p className="text-xs leading-relaxed text-muted-foreground">
             <strong className="text-foreground">LGPD (Lei 13.709/2018):</strong>{" "}
-            Source Authority opera sob "legítimo interesse" (Art. 7º, IX) pra
+            Source Authority opera sob &ldquo;legítimo interesse&rdquo; (Art. 7º, IX) pra
             analytics agregados. Dados capturados são anônimos por design —
             sem IP armazenado, sem fingerprinting, sem cross-site tracking.
             Cliente final pode solicitar exclusão a qualquer momento via{" "}
