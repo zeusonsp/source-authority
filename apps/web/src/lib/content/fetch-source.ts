@@ -120,7 +120,24 @@ async function fetchWithTimeout(
 }
 
 async function downloadCapped(url: string): Promise<Buffer> {
-  const res = await fetchWithTimeout(url);
+  // Instagram/TikTok CDN bloqueiam hotlink quando vem sem Referer da
+  // própria plataforma. Detectamos host e seta Referer + Accept image/*.
+  const headers: Record<string, string> = {
+    Accept: "image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8,*/*;q=0.5",
+  };
+  try {
+    const u = new URL(url);
+    if (u.hostname.includes("cdninstagram.com") || u.hostname.includes("fbcdn.net")) {
+      headers.Referer = "https://www.instagram.com/";
+    } else if (u.hostname.includes("tiktokcdn") || u.hostname.includes("byteoversea")) {
+      headers.Referer = "https://www.tiktok.com/";
+    } else if (u.hostname.includes("ytimg.com") || u.hostname.includes("youtube.com")) {
+      headers.Referer = "https://www.youtube.com/";
+    }
+  } catch {
+    /* noop */
+  }
+  const res = await fetchWithTimeout(url, { headers });
   if (!res.ok) throw new Error(`download ${res.status}: ${res.statusText}`);
   const reader = res.body?.getReader();
   if (!reader) throw new Error("no response body");
@@ -147,7 +164,7 @@ async function fetchOpenGraph(url: string): Promise<{
   thumbnail_url: string | null;
 }> {
   const res = await fetchWithTimeout(url, {
-    headers: { Accept: "text/html" },
+    headers: { Accept: "text/html,application/xhtml+xml" },
   });
   if (!res.ok) {
     throw new Error(`og fetch ${res.status}`);
@@ -155,16 +172,40 @@ async function fetchOpenGraph(url: string): Promise<{
   // Cap HTML size pra evitar abuse.
   const text = (await res.text()).slice(0, 500_000);
 
-  const ogImage = text.match(
-    /<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i,
-  );
-  const ogTitle = text.match(
-    /<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/i,
-  );
+  // Regex tolera atributos em qualquer ordem (property antes/depois content)
+  // e também `name=` em vez de `property=` (alguns sites usam name).
+  const findMeta = (key: string): string | null => {
+    const propThenContent = text.match(
+      new RegExp(
+        `<meta\\s+(?:property|name)=["']${key}["']\\s+content=["']([^"']+)["']`,
+        "i",
+      ),
+    );
+    if (propThenContent) return propThenContent[1] ?? null;
+    const contentThenProp = text.match(
+      new RegExp(
+        `<meta\\s+content=["']([^"']+)["']\\s+(?:property|name)=["']${key}["']`,
+        "i",
+      ),
+    );
+    if (contentThenProp) return contentThenProp[1] ?? null;
+    return null;
+  };
+
+  // Decode HTML entities mais comuns que aparecem em og:image URLs.
+  const decode = (s: string | null): string | null => {
+    if (!s) return null;
+    return s
+      .replace(/&amp;/g, "&")
+      .replace(/&#x2F;/gi, "/")
+      .replace(/&#47;/g, "/")
+      .replace(/&quot;/g, '"');
+  };
 
   return {
-    title: ogTitle?.[1] ?? null,
-    thumbnail_url: ogImage?.[1] ?? null,
+    title: decode(findMeta("og:title")) ?? decode(findMeta("twitter:title")),
+    thumbnail_url:
+      decode(findMeta("og:image")) ?? decode(findMeta("twitter:image")),
   };
 }
 
