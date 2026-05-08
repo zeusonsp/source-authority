@@ -5,6 +5,7 @@ import type {
   DeviceCount,
   EventForAggregation,
   LabeledCount,
+  ReferrerCount,
   ReportDataset,
   ReportPreset,
 } from "./types";
@@ -68,6 +69,12 @@ export function resolveRange(
 export function aggregate(
   range: DateRange,
   events: EventForAggregation[],
+  /**
+   * Map opcional de reseller_codes cadastrados (`code -> name`). Usado
+   * pra hidratar `topReferrers[].name`. Codes que aparecem em events
+   * mas não estão neste map ficam com `name: null` (raw).
+   */
+  resellerNamesByCode: Map<string, string> = new Map(),
 ): ReportDataset {
   const now = Date.now();
   const fromMs = new Date(range.from).getTime();
@@ -84,6 +91,8 @@ export function aggregate(
   const deviceMap = new Map<string, number>();
   const langMap = new Map<string, number>();
   const referrerMap = new Map<string, number>();
+  const referrerCodeMap = new Map<string, number>();
+  let referrerCodeTotal = 0;
 
   for (const e of events) {
     total++;
@@ -112,6 +121,13 @@ export function aggregate(
       referrerLabel,
       (referrerMap.get(referrerLabel) ?? 0) + 1,
     );
+    if (e.referrer_code) {
+      referrerCodeMap.set(
+        e.referrer_code,
+        (referrerCodeMap.get(e.referrer_code) ?? 0) + 1,
+      );
+      referrerCodeTotal++;
+    }
   }
 
   return {
@@ -128,7 +144,29 @@ export function aggregate(
     byDevice: toSortedDevices(deviceMap),
     byLang: toSortedLabeled(langMap, 10),
     byReferrer: toSortedLabeled(referrerMap, 10),
+    topReferrers: toSortedReferrers(
+      referrerCodeMap,
+      referrerCodeTotal,
+      resellerNamesByCode,
+    ),
   };
+}
+
+function toSortedReferrers(
+  map: Map<string, number>,
+  total: number,
+  names: Map<string, string>,
+): ReferrerCount[] {
+  if (total === 0) return [];
+  return Array.from(map.entries())
+    .map(([code, clicks]) => ({
+      code,
+      name: names.get(code) ?? null,
+      clicks,
+      pct: Math.round((clicks / total) * 100),
+    }))
+    .sort((a, b) => b.clicks - a.clicks)
+    .slice(0, 10);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

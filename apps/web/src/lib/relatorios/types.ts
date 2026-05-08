@@ -68,6 +68,24 @@ export type ReportDataset = {
   byLang: LabeledCount[];
   /** Top 10 origens (domínio extraído do referrer; 'direto' se null). */
   byReferrer: LabeledCount[];
+  /**
+   * Pillar 3 v1 — Top revendedores por cliques.
+   * Cada item junta o `referrer_code` (raw da URL ?ref=) com o `name`
+   * cadastrado em /revendedores (se existir). Codes não-cadastrados
+   * aparecem com label `<código>` mesmo. Ordenado desc por cliques,
+   * top 10.
+   */
+  topReferrers: ReferrerCount[];
+};
+
+export type ReferrerCount = {
+  /** Code raw como veio na URL (ex: 'ana', 'instagram'). */
+  code: string;
+  /** Nome amigável (do reseller_codes.name). null = não cadastrado. */
+  name: string | null;
+  clicks: number;
+  /** Percentual sobre total de events com referrer_code (0-100). */
+  pct: number;
 };
 
 /** Subset das colunas de events que precisamos pra agregar. */
@@ -77,4 +95,6 @@ export type EventForAggregation = {
   device: string | null;
   lang: string | null;
   referrer: string | null;
+  /** Pillar 3 v1 — código de revendedor capturado pelo tracker. */
+  referrer_code: string | null;
 };

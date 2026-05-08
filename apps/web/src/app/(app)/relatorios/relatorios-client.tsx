@@ -76,6 +76,7 @@ export function RelatoriosClient({ data }: Props) {
             byReferrer={data.byReferrer}
             total={data.kpis.total}
           />
+          <TopReferrersCard topReferrers={data.topReferrers} />
           <ExportRow range={data.range} />
         </>
       )}
@@ -427,6 +428,76 @@ function BreakdownsRow({
         total={total}
         emptyText="Sem dados de origem."
       />
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Top Revendedores (Pillar 3 v1)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function TopReferrersCard({
+  topReferrers,
+}: {
+  topReferrers: ReportDataset["topReferrers"];
+}) {
+  return (
+    <section className="rounded-lg border border-border bg-card p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-xs uppercase tracking-wide text-muted-foreground">
+          Top Revendedores
+        </h3>
+        <a
+          href="/revendedores"
+          className="text-xs text-accent hover:underline"
+        >
+          gerenciar →
+        </a>
+      </div>
+      {topReferrers.length === 0 ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">
+          Nenhum click com{" "}
+          <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+            ?ref=código
+          </code>{" "}
+          no período. Cadastra códigos em{" "}
+          <a href="/revendedores" className="text-accent hover:underline">
+            Revendedores
+          </a>{" "}
+          e usa os links gerados.
+        </p>
+      ) : (
+        <ul className="space-y-1.5">
+          {topReferrers.map((r, i) => (
+            <li
+              key={r.code}
+              className="grid grid-cols-[24px_1fr_auto_56px] items-center gap-3 rounded-md px-2 py-1.5 hover:bg-secondary/40"
+            >
+              <span className="text-xs font-medium text-muted-foreground">
+                #{i + 1}
+              </span>
+              <span className="min-w-0 truncate">
+                <span className="font-mono text-sm text-accent">{r.code}</span>
+                {r.name ? (
+                  <span className="ml-2 text-sm text-foreground">
+                    · {r.name}
+                  </span>
+                ) : (
+                  <span className="ml-2 text-xs italic text-muted-foreground">
+                    · não cadastrado
+                  </span>
+                )}
+              </span>
+              <span className="font-mono text-sm tabular-nums">
+                {r.clicks.toLocaleString("pt-BR")}
+              </span>
+              <span className="text-right text-xs text-muted-foreground">
+                {r.pct}%
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }
