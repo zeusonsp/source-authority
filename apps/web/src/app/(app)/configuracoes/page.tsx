@@ -39,6 +39,25 @@ export default async function ConfiguracoesPage() {
   const canEdit =
     membership.role === "owner" || membership.role === "admin";
 
+  // Colunas billing chegam pelo `select *` mas não estão tipadas em
+  // database.types.ts (migration 20260508100000_billing.sql pendente). Cast
+  // pra extrair sem error de TS.
+  // TODO(ssr-0.5.2): regenerar types depois que a migration for aplicada.
+  const billingRow = company as unknown as {
+    billing_status?: string | null;
+    trial_ends_at?: string | null;
+    plan_renewed_at?: string | null;
+    stripe_customer_id?: string | null;
+    billing_exempt?: boolean | null;
+  };
+  const billing = {
+    billing_status: billingRow.billing_status ?? "none",
+    trial_ends_at: billingRow.trial_ends_at ?? null,
+    plan_renewed_at: billingRow.plan_renewed_at ?? null,
+    stripe_customer_id: billingRow.stripe_customer_id ?? null,
+    billing_exempt: billingRow.billing_exempt ?? false,
+  };
+
   return (
     <div className="container py-8">
       <div className="mx-auto max-w-3xl space-y-6">
@@ -61,7 +80,11 @@ export default async function ConfiguracoesPage() {
           </Alert>
         ) : null}
 
-        <ConfiguracoesForm company={company} canEdit={canEdit} />
+        <ConfiguracoesForm
+          company={company}
+          billing={billing}
+          canEdit={canEdit}
+        />
       </div>
     </div>
   );

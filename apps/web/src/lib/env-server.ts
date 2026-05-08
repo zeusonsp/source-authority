@@ -23,12 +23,31 @@ const serverEnvSchema = z.object({
   // Gere com `openssl rand -hex 32` (32 bytes = 64 hex chars). Mesmo valor
   // precisa estar setado no worker (wrangler secret put).
   INTERNAL_NOTIFICATIONS_SECRET: z.string().min(32),
+  // Stripe (Fase 7 — billing).
+  // Secret key (sk_test_ em dev, sk_live_ em prod). Nunca exposta ao client.
+  STRIPE_SECRET_KEY: z.string().min(1),
+  // Webhook signing secret (whsec_xxx) — usado por /api/billing/stripe/webhook
+  // pra validar req.body com `stripe.webhooks.constructEvent`.
+  STRIPE_WEBHOOK_SECRET: z.string().min(1),
+  // Price IDs (price_xxx) — um por plano. Criados via Stripe API
+  // (scripts/stripe-setup.cjs). Não use Lookup Keys: lookup é resolvido a cada
+  // checkout, mais latência e ponto de falha.
+  STRIPE_PRICE_STARTER: z.string().min(1),
+  STRIPE_PRICE_GROWTH: z.string().min(1),
+  STRIPE_PRICE_PRO: z.string().min(1),
+  STRIPE_PRICE_BUSINESS: z.string().min(1),
 });
 
 const parsed = serverEnvSchema.safeParse({
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
   RESEND_API_KEY: process.env.RESEND_API_KEY,
   INTERNAL_NOTIFICATIONS_SECRET: process.env.INTERNAL_NOTIFICATIONS_SECRET,
+  STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
+  STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
+  STRIPE_PRICE_STARTER: process.env.STRIPE_PRICE_STARTER,
+  STRIPE_PRICE_GROWTH: process.env.STRIPE_PRICE_GROWTH,
+  STRIPE_PRICE_PRO: process.env.STRIPE_PRICE_PRO,
+  STRIPE_PRICE_BUSINESS: process.env.STRIPE_PRICE_BUSINESS,
 });
 
 if (!parsed.success) {
