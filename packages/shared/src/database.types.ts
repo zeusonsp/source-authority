@@ -184,6 +184,72 @@ export type Database = {
           },
         ]
       }
+      contents: {
+        Row: {
+          company_id: string
+          duration_seconds: number | null
+          external_id: string | null
+          id: string
+          notes: string | null
+          registered_at: string
+          registered_by: string | null
+          source_platform: string
+          source_url: string
+          status: string
+          status_detail: string | null
+          thumbnail_dhash: string | null
+          thumbnail_url: string | null
+          title: string | null
+        }
+        Insert: {
+          company_id: string
+          duration_seconds?: number | null
+          external_id?: string | null
+          id?: string
+          notes?: string | null
+          registered_at?: string
+          registered_by?: string | null
+          source_platform: string
+          source_url: string
+          status?: string
+          status_detail?: string | null
+          thumbnail_dhash?: string | null
+          thumbnail_url?: string | null
+          title?: string | null
+        }
+        Update: {
+          company_id?: string
+          duration_seconds?: number | null
+          external_id?: string | null
+          id?: string
+          notes?: string | null
+          registered_at?: string
+          registered_by?: string | null
+          source_platform?: string
+          source_url?: string
+          status?: string
+          status_detail?: string | null
+          thumbnail_dhash?: string | null
+          thumbnail_url?: string | null
+          title?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contents_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contents_registered_by_fkey"
+            columns: ["registered_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conversions: {
         Row: {
           amount_cents: number

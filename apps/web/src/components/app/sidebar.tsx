@@ -2,6 +2,7 @@
 
 import {
   Bell,
+  Copy,
   FileBarChart,
   LayoutDashboard,
   Link2,
@@ -40,6 +41,12 @@ const NAV_ITEMS: readonly NavItem[] = [
     href: "/alertas",
     label: "Alertas",
     icon: Bell,
+    badge: null,
+  },
+  {
+    href: "/meu-conteudo",
+    label: "Meu Conteúdo",
+    icon: Copy,
     badge: null,
   },
   {
