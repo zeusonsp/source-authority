@@ -87,6 +87,12 @@ export type ReportDataset = {
    * Ordem: receita desc → clicks desc. Top 10.
    */
   topReferrers: ReferrerCount[];
+  /**
+   * Tier 2 — KPIs do período anterior (mesma duração, imediatamente
+   * antes de range.from). NULL se não há dados ou período não cobrível
+   * (ex: range customizado super antigo). UI computa deltas no client.
+   */
+  kpisPrevious: ReportDataset["kpis"] | null;
 };
 
 export type RevenueBucket = {

@@ -201,6 +201,22 @@ export function aggregate(
       resellerNamesByCode,
       salesByCode,
     ),
+    kpisPrevious: null,
+  };
+}
+
+/**
+ * Tier 2 — calcula range do período anterior (mesma duração, imediatamente
+ * antes do range atual). Usado pra comparação de KPIs.
+ */
+export function previousRange(current: DateRange): DateRange {
+  const fromMs = new Date(current.from).getTime();
+  const toMs = new Date(current.to).getTime();
+  const durationMs = toMs - fromMs;
+  return {
+    from: new Date(fromMs - durationMs).toISOString(),
+    to: new Date(fromMs).toISOString(),
+    preset: "custom",
   };
 }
 
