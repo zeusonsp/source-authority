@@ -98,21 +98,13 @@
 
   var sessionId = getOrCreateSessionId();
 
-  // ─── Page view: dedupe por sessão ──────────────────────────────────────────
-  var pageviewKey = "sa_pixel_pv_" + slug;
-  var firedPageView = false;
-  try {
-    if (
-      window.sessionStorage &&
-      sessionStorage.getItem(pageviewKey)
-    ) {
-      firedPageView = true;
-    } else if (window.sessionStorage) {
-      sessionStorage.setItem(pageviewKey, "1");
-    }
-  } catch (e) {}
-
-  if (!firedPageView) {
+  // ─── Page view: dispara em CADA navegação (page journey tracking) ─────────
+  // Antes dedupávamos por sessão pra evitar inflar contagem; agora cada
+  // page load = 1 evento. session_id (durável em localStorage) permite
+  // reconstituir a jornada do visitor: /home → /produtos → /carrinho.
+  // SPA route changes (history.pushState) também disparam via listener
+  // adicionado abaixo.
+  function fireView() {
     var ref = null;
     try {
       ref = new URL(window.location.href).searchParams.get("ref");
@@ -175,6 +167,32 @@
     };
 
     sendBeacon(endpoint + "/api/pixel", pv);
+  }
+
+  // Dispara o primeiro page-view.
+  fireView();
+
+  // SPA detection: hooka history.pushState/replaceState pra disparar
+  // pixel quando o cliente navega via client-side routing (Next.js,
+  // React Router, etc) sem full page load.
+  try {
+    var origPushState = history.pushState;
+    var origReplaceState = history.replaceState;
+    history.pushState = function () {
+      origPushState.apply(history, arguments);
+      // setTimeout 0 garante que document.location já refletiu a mudança.
+      setTimeout(fireView, 0);
+    };
+    history.replaceState = function () {
+      origReplaceState.apply(history, arguments);
+      setTimeout(fireView, 0);
+    };
+    // Browser back/forward.
+    window.addEventListener("popstate", function () {
+      setTimeout(fireView, 0);
+    });
+  } catch (e) {
+    // history API bloqueada (raro) — graceful skip.
   }
 
   // ─── Conversion API global ─────────────────────────────────────────────────

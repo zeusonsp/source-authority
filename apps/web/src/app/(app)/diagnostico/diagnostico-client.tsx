@@ -45,9 +45,13 @@ const FIELD_GROUPS: FieldGroup[] = [
   {
     title: "Dispositivo & Browser",
     description:
-      "Parte vem do User-Agent (server) e parte de APIs JS no pixel.js do site cliente.",
+      "Parte vem do User-Agent parseado (server) e parte de APIs JS no pixel.js do site cliente.",
     fields: [
       { label: "Tipo de device", key: "device" },
+      { label: "Browser", key: "_browser" },
+      { label: "Sistema operacional", key: "_os" },
+      { label: "Fabricante", key: "device_vendor" },
+      { label: "Modelo", key: "device_model" },
       { label: "Idioma preferido", key: "lang" },
       { label: "Resolução tela", key: "_screen" },
       { label: "Viewport", key: "_viewport" },
@@ -83,7 +87,7 @@ const FIELD_GROUPS: FieldGroup[] = [
 ];
 
 function formatValue(key: string, value: unknown, raw: EventRow): string {
-  // Computed fields: combina screen_width + height etc.
+  // Computed fields: combina campos pra display amigável.
   if (key === "_screen") {
     const w = raw?.screen_width;
     const h = raw?.screen_height;
@@ -94,6 +98,22 @@ function formatValue(key: string, value: unknown, raw: EventRow): string {
     const w = raw?.viewport_width;
     const h = raw?.viewport_height;
     if (typeof w === "number" && typeof h === "number") return `${w} × ${h}px`;
+    return "—";
+  }
+  if (key === "_browser") {
+    const n = raw?.browser_name;
+    const v = raw?.browser_version;
+    if (typeof n === "string" && n) {
+      return typeof v === "string" && v ? `${n} ${v}` : n;
+    }
+    return "—";
+  }
+  if (key === "_os") {
+    const n = raw?.os_name;
+    const v = raw?.os_version;
+    if (typeof n === "string" && n) {
+      return typeof v === "string" && v ? `${n} ${v}` : n;
+    }
     return "—";
   }
   if (value === null || value === undefined || value === "") return "—";
