@@ -18,6 +18,10 @@ export type ResellerRow = {
   created_at: string;
   /** Cliques nos últimos 30 dias (computado server-side). */
   clicks_30d: number;
+  /** Vendas atribuídas nos últimos 30 dias (Pillar 3 v2). */
+  sales_30d: number;
+  /** Soma de amount_cents das vendas atribuídas (BRL). */
+  revenue_30d_cents: number;
 };
 
 type Props = {
@@ -203,11 +207,21 @@ function ResellerCard({
             <p className="text-xs text-muted-foreground">{row.notes}</p>
           ) : null}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
           <span className="rounded-full border border-border bg-background px-2.5 py-0.5 text-xs font-medium">
             {row.clicks_30d.toLocaleString("pt-BR")}{" "}
-            {row.clicks_30d === 1 ? "click" : "clicks"} 30d
+            {row.clicks_30d === 1 ? "click" : "clicks"}
           </span>
+          {row.sales_30d > 0 ? (
+            <span className="rounded-full border border-accent/40 bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent">
+              {row.sales_30d}{" "}
+              {row.sales_30d === 1 ? "venda" : "vendas"} ·{" "}
+              {(row.revenue_30d_cents / 100).toLocaleString("pt-BR", {
+                style: "currency",
+                currency: "BRL",
+              })}
+            </span>
+          ) : null}
           {canEdit ? (
             <Button
               type="button"

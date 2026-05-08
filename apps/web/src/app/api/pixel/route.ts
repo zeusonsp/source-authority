@@ -34,6 +34,8 @@ const bodySchema = z.object({
   referrer: z.string().max(2000).nullable().optional(),
   ref: z.string().max(64).nullable().optional(),
   lang: z.string().max(20).nullable().optional(),
+  // Pillar 3 v2 — UUID gerado pelo pixel.js pra match em /api/pixel/conversion.
+  session_id: z.string().max(64).nullable().optional(),
 });
 
 const CORS_HEADERS = {
@@ -102,6 +104,7 @@ export async function POST(req: Request) {
     referrer: parsed.referrer ?? null,
     user_agent: ua,
     referrer_code: referrerCode,
+    session_id: parsed.session_id ?? null,
   });
 
   if (insertResult.error) {

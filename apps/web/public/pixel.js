@@ -1,20 +1,31 @@
 /**
- * Source Authority — Tracking Pixel
+ * Source Authority — Tracking Pixel + Conversion API
  *
- * Cliente embeda no <head> do site da empresa. Dispara 1 evento por
- * sessão pra apps/web /api/pixel — captura URL, referrer, ?ref=, idioma.
+ * Cliente embeda no <head> do site. Captura page-views (1 por sessão)
+ * e expõe `window.saTrack('conversion', {...})` pra reportar vendas.
  *
- * Uso:
+ * Uso básico:
  *   <script defer src="https://app.sourceauthority.com.br/pixel.js"
  *           data-slug="zeus"></script>
  *
- * Servido como static do Vercel CDN (cache imutável). ~1KB minificado.
+ * Reportar venda (ex: página de obrigado):
+ *   <script>
+ *     saTrack('conversion', {
+ *       external_id: 'ORDER_12345',
+ *       amount: 9990,        // em centavos: R$ 99,90
+ *       currency: 'BRL'
+ *     });
+ *   </script>
+ *
+ * Atribuição: last-click within session. Pixel grava session_id em
+ * localStorage. Quando saTrack('conversion') é chamado, backend casa
+ * com último event do mesmo session_id que tinha referrer_code.
+ *
+ * Servido como static do Vercel CDN. ~2KB gzip.
  */
 (function () {
   "use strict";
 
-  // currentScript é null em scripts que rodam após DOMContentLoaded em
-  // alguns browsers; fallback pra busca por src.
   var script =
     document.currentScript ||
     (function () {
@@ -37,58 +48,149 @@
     return;
   }
 
-  // Endpoint absoluto pra fetch CORS funcionar.
   var endpoint =
     script.getAttribute("data-endpoint") ||
-    "https://app.sourceauthority.com.br/api/pixel";
+    "https://app.sourceauthority.com.br";
 
-  // Dedupe por sessão. SessionStorage é per-tab/window — cada nova aba
-  // gera 1 evento. Mais granular que cookies, menos privado que localStorage.
-  var key = "sa_pixel_" + slug;
-  try {
-    if (window.sessionStorage && sessionStorage.getItem(key)) return;
-    if (window.sessionStorage) sessionStorage.setItem(key, "1");
-  } catch (e) {
-    // sessionStorage pode estar bloqueado (private mode em alguns browsers).
-    // Nesse caso disparamos toda hora — não é ideal mas evita quebrar.
+  // ─── Session ID (durável via localStorage) ─────────────────────────────────
+  // Pra atribuição last-click cross-page-view: o mesmo visitor mantém o
+  // session_id em todas suas visitas. saTrack('conversion') mais tarde
+  // bate no events.session_id pra encontrar o último ?ref=.
+  //
+  // Se localStorage bloqueado (private mode), fallback pra sessionStorage
+  // (perde ao fechar aba) ou random per-load (sem atribuição).
+  function getOrCreateSessionId() {
+    var key = "sa_session_" + slug;
+    try {
+      if (window.localStorage) {
+        var existing = localStorage.getItem(key);
+        if (existing) return existing;
+        var sid = generateUuid();
+        localStorage.setItem(key, sid);
+        return sid;
+      }
+    } catch (e) {}
+    try {
+      if (window.sessionStorage) {
+        var existing2 = sessionStorage.getItem(key);
+        if (existing2) return existing2;
+        var sid2 = generateUuid();
+        sessionStorage.setItem(key, sid2);
+        return sid2;
+      }
+    } catch (e2) {}
+    return generateUuid();
   }
 
-  // Captura ?ref= da URL atual pra atribuição.
-  var ref = null;
-  try {
-    var url = new URL(window.location.href);
-    ref = url.searchParams.get("ref");
-  } catch (e) {
-    // URL constructor pode falhar em browsers muito antigos.
+  // UUIDv4 simples — não cripto-segura, suficiente pra session ID.
+  function generateUuid() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    var chars = "0123456789abcdef";
+    var s = "";
+    for (var i = 0; i < 36; i++) {
+      if (i === 8 || i === 13 || i === 18 || i === 23) s += "-";
+      else if (i === 14) s += "4";
+      else if (i === 19) s += chars[(Math.random() * 4) | 8];
+      else s += chars[(Math.random() * 16) | 0];
+    }
+    return s;
   }
 
-  var payload = {
-    slug: slug,
-    url: window.location.href,
-    referrer: document.referrer || null,
-    ref: ref,
-    lang:
-      (navigator.language ||
+  var sessionId = getOrCreateSessionId();
+
+  // ─── Page view: dedupe por sessão ──────────────────────────────────────────
+  var pageviewKey = "sa_pixel_pv_" + slug;
+  var firedPageView = false;
+  try {
+    if (
+      window.sessionStorage &&
+      sessionStorage.getItem(pageviewKey)
+    ) {
+      firedPageView = true;
+    } else if (window.sessionStorage) {
+      sessionStorage.setItem(pageviewKey, "1");
+    }
+  } catch (e) {}
+
+  if (!firedPageView) {
+    var ref = null;
+    try {
+      ref = new URL(window.location.href).searchParams.get("ref");
+    } catch (e) {}
+
+    var pv = {
+      slug: slug,
+      url: window.location.href,
+      referrer: document.referrer || null,
+      ref: ref,
+      lang:
+        navigator.language ||
         navigator.userLanguage ||
-        navigator.browserLanguage) ||
-      null,
+        navigator.browserLanguage ||
+        null,
+      session_id: sessionId,
+    };
+
+    sendBeacon(endpoint + "/api/pixel", pv);
+  }
+
+  // ─── Conversion API global ─────────────────────────────────────────────────
+  // window.saTrack('conversion', { external_id, amount, currency, ... })
+  //
+  // Idempotência via external_id — chamadas duplicadas (page reload, retry)
+  // pra mesmo order_id geram só 1 row no DB.
+  window.saTrack = function (action, data) {
+    if (action !== "conversion") {
+      if (window.console && console.warn) {
+        console.warn("[source-authority/pixel] unknown action: " + action);
+      }
+      return;
+    }
+    if (!data || typeof data !== "object") {
+      if (window.console && console.warn) {
+        console.warn("[source-authority/pixel] saTrack(conversion) missing data");
+      }
+      return;
+    }
+    var payload = {
+      slug: slug,
+      external_id: String(data.external_id || ""),
+      amount_cents:
+        typeof data.amount === "number"
+          ? Math.round(data.amount)
+          : typeof data.amount_cents === "number"
+            ? Math.round(data.amount_cents)
+            : 0,
+      currency: data.currency || "BRL",
+      session_id: sessionId,
+      occurred_at: data.occurred_at || null,
+    };
+    if (!payload.external_id) {
+      if (window.console && console.warn) {
+        console.warn(
+          "[source-authority/pixel] conversion missing external_id (the ID of the sale in your system)",
+        );
+      }
+      return;
+    }
+    sendBeacon(endpoint + "/api/pixel/conversion", payload);
   };
 
-  // keepalive permite que o request termine mesmo se a página navegar
-  // logo em seguida. Suporte: Chrome 66+, Firefox 65+, Safari 14+ (~95%).
-  try {
-    fetch(endpoint, {
-      method: "POST",
-      mode: "cors",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      keepalive: true,
-      credentials: "omit",
-    }).catch(function () {
-      // Falha silenciosa — não atrapalha experiência do visitante.
-    });
-  } catch (e) {
-    // Browser sem fetch (IE) — graceful skip. Tracker via link mestre
-    // continua funcionando.
+  // ─── Helper ────────────────────────────────────────────────────────────────
+  function sendBeacon(url, payload) {
+    try {
+      fetch(url, {
+        method: "POST",
+        mode: "cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        keepalive: true,
+        credentials: "omit",
+      }).catch(function () {
+        // Falha silenciosa — não atrapalha experiência do visitante.
+      });
+    } catch (e) {
+      // Browser sem fetch (IE) — graceful skip.
+    }
   }
 })();

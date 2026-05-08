@@ -39,7 +39,7 @@ export default async function RevendedoresPage() {
     .eq("company_id", membership.company_id)
     .order("created_at", { ascending: false });
 
-  // Eventos com referrer_code dos últimos 30d (pra agregação por code).
+  // Eventos com referrer_code dos últimos 30d (pra agregação de cliques).
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const { data: events } = await supabase
     .from("events")
@@ -48,23 +48,43 @@ export default async function RevendedoresPage() {
     .gte("created_at", since)
     .not("referrer_code", "is", null);
 
-  // Agrega clicks por code em memória (n eventos pequeno o bastante; quando
-  // virar gargalo, troca por RPC count_clicks_per_reseller(company_id)).
-  const counts = new Map<string, number>();
+  // Conversions atribuídas nos últimos 30d (Pillar 3 v2).
+  const { data: conversions } = await supabase
+    .from("conversions")
+    .select("reseller_code, amount_cents")
+    .eq("company_id", membership.company_id)
+    .gte("occurred_at", since)
+    .not("reseller_code", "is", null);
+
+  // Agrega em memória.
+  const clicks = new Map<string, number>();
   for (const e of events ?? []) {
     if (!e.referrer_code) continue;
-    counts.set(e.referrer_code, (counts.get(e.referrer_code) ?? 0) + 1);
+    clicks.set(e.referrer_code, (clicks.get(e.referrer_code) ?? 0) + 1);
+  }
+  const sales = new Map<string, { count: number; revenue: number }>();
+  for (const c of conversions ?? []) {
+    if (!c.reseller_code) continue;
+    const acc = sales.get(c.reseller_code) ?? { count: 0, revenue: 0 };
+    acc.count += 1;
+    acc.revenue += Number(c.amount_cents);
+    sales.set(c.reseller_code, acc);
   }
 
   const rows: ResellerRow[] =
-    codes?.map((c) => ({
-      id: c.id,
-      code: c.code,
-      name: c.name,
-      notes: c.notes,
-      created_at: c.created_at,
-      clicks_30d: counts.get(c.code) ?? 0,
-    })) ?? [];
+    codes?.map((c) => {
+      const s = sales.get(c.code);
+      return {
+        id: c.id,
+        code: c.code,
+        name: c.name,
+        notes: c.notes,
+        created_at: c.created_at,
+        clicks_30d: clicks.get(c.code) ?? 0,
+        sales_30d: s?.count ?? 0,
+        revenue_30d_cents: s?.revenue ?? 0,
+      };
+    }) ?? [];
 
   return (
     <div className="container py-8">
