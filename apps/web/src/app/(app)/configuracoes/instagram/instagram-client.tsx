@@ -273,7 +273,7 @@ function HashtagsCard({
             <Input
               value={tag}
               onChange={(e) => setTag(e.target.value.toLowerCase())}
-              placeholder="zeustec, leds, comerciobr..."
+              placeholder="zeus, leds, comerciobr..."
               maxLength={64}
               pattern="[a-z0-9_]+"
               required
