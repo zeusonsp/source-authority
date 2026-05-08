@@ -52,7 +52,24 @@ export default async function RelatoriosPage({ searchParams }: PageProps) {
     resellerNamesByCode.set(r.code, r.name);
   }
 
-  const data = aggregate(range, events ?? [], resellerNamesByCode);
+  // Pillar 3 v2 — fetch conversions no mesmo range pra agregação.
+  const { data: conversions } = await supabase
+    .from("conversions")
+    .select("occurred_at, amount_cents, reseller_code")
+    .eq("company_id", membership.company_id)
+    .gte("occurred_at", range.from)
+    .lte("occurred_at", range.to);
+
+  const data = aggregate(
+    range,
+    events ?? [],
+    resellerNamesByCode,
+    (conversions ?? []).map((c) => ({
+      occurred_at: c.occurred_at,
+      amount_cents: Number(c.amount_cents),
+      reseller_code: c.reseller_code,
+    })),
+  );
 
   return (
     <div className="container py-8">

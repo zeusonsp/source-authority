@@ -69,6 +69,9 @@ export function RelatoriosClient({ data }: Props) {
           <KpiGrid kpis={data.kpis} />
           <HourlyChart data={data.hourly} />
           <DailyChart data={data.daily} />
+          {data.kpis.conversions > 0 ? (
+            <RevenueChart data={data.dailyRevenue} />
+          ) : null}
           <MapSection topCountries={data.topCountries} total={data.kpis.total} />
           <BreakdownsRow
             byDevice={data.byDevice}
@@ -184,29 +187,94 @@ function DateRangeBar({ range }: { range: ReportDataset["range"] }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function KpiGrid({ kpis }: { kpis: ReportDataset["kpis"] }) {
-  const cards = [
-    { label: "Total no período", value: kpis.total },
-    { label: "Últimas 24h", value: kpis.last24h },
-    { label: "Países", value: kpis.countries },
-    { label: "Dias com cliques", value: kpis.activeDays },
+  const fmtBRL = (cents: number) =>
+    (cents / 100).toLocaleString("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+      maximumFractionDigits: 0,
+    });
+  const fmtN = (n: number) => n.toLocaleString("pt-BR");
+
+  const trafficCards = [
+    { label: "Cliques", value: fmtN(kpis.total) },
+    { label: "Últimas 24h", value: fmtN(kpis.last24h) },
+    { label: "Países", value: fmtN(kpis.countries) },
+    { label: "Dias com cliques", value: fmtN(kpis.activeDays) },
   ];
+
+  // Pillar 3 v2 — só mostra cards de receita se houver pelo menos 1
+  // conversão no período (evita ruído visual quando empresa ainda não
+  // tem pixel saTrack instalado).
+  const hasRevenue = kpis.conversions > 0;
+
   return (
-    <section
-      aria-label="KPIs do período"
-      className="grid grid-cols-2 gap-3 md:grid-cols-4"
-    >
-      {cards.map((c) => (
-        <div
-          key={c.label}
-          className="rounded-lg border border-border bg-card p-4"
+    <div className="space-y-3">
+      <section
+        aria-label="KPIs de tráfego"
+        className="grid grid-cols-2 gap-3 md:grid-cols-4"
+      >
+        {trafficCards.map((c) => (
+          <div
+            key={c.label}
+            className="rounded-lg border border-border bg-card p-4"
+          >
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              {c.label}
+            </p>
+            <p className="mt-2 text-2xl font-semibold tabular-nums">{c.value}</p>
+          </div>
+        ))}
+      </section>
+
+      {hasRevenue ? (
+        <section
+          aria-label="KPIs de receita"
+          className="grid grid-cols-2 gap-3 md:grid-cols-4"
         >
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">
-            {c.label}
-          </p>
-          <p className="mt-2 text-2xl font-semibold tabular-nums">{c.value}</p>
-        </div>
-      ))}
-    </section>
+          <div className="rounded-lg border border-accent/40 bg-accent/5 p-4">
+            <p className="text-xs uppercase tracking-wide text-accent">
+              Receita
+            </p>
+            <p className="mt-2 text-2xl font-semibold tabular-nums text-accent">
+              {fmtBRL(kpis.revenueCents)}
+            </p>
+          </div>
+          <div className="rounded-lg border border-border bg-card p-4">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              Vendas
+            </p>
+            <p className="mt-2 text-2xl font-semibold tabular-nums">
+              {fmtN(kpis.conversions)}
+            </p>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              {kpis.attributedPct}% atribuídas a revendedor
+            </p>
+          </div>
+          <div className="rounded-lg border border-border bg-card p-4">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              Taxa de conversão
+            </p>
+            <p className="mt-2 text-2xl font-semibold tabular-nums">
+              {kpis.conversionRate}%
+            </p>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              vendas / cliques no período
+            </p>
+          </div>
+          <div className="rounded-lg border border-border bg-card p-4">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              Ticket médio
+            </p>
+            <p className="mt-2 text-2xl font-semibold tabular-nums">
+              {fmtBRL(kpis.aovCents)}
+            </p>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              receita / vendas
+            </p>
+          </div>
+        </section>
+      ) : null}
+    </div>
   );
 }
 
@@ -433,7 +501,85 @@ function BreakdownsRow({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Top Revendedores (Pillar 3 v1)
+// Revenue chart (Pillar 3 v2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function RevenueChart({
+  data,
+}: {
+  data: ReportDataset["dailyRevenue"];
+}) {
+  const formatted = data.map((b) => ({
+    label: new Date(b.bucket).toLocaleDateString("pt-BR", {
+      day: "2-digit",
+      month: "short",
+      timeZone: "America/Sao_Paulo",
+    }),
+    revenue: b.revenueCents / 100,
+    sales: b.sales,
+  }));
+  const total = data.reduce((s, b) => s + b.revenueCents, 0);
+
+  return (
+    <section className="rounded-lg border border-border bg-card p-4">
+      <div className="mb-2 flex items-center justify-between">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          Receita por dia
+        </h2>
+        <span className="text-sm tabular-nums text-accent">
+          {(total / 100).toLocaleString("pt-BR", {
+            style: "currency",
+            currency: "BRL",
+          })}
+        </span>
+      </div>
+      <ResponsiveContainer width="100%" height={220}>
+        <BarChart data={formatted}>
+          <CartesianGrid stroke="#222" strokeDasharray="2 4" />
+          <XAxis
+            dataKey="label"
+            stroke="#666"
+            fontSize={11}
+            tickLine={false}
+          />
+          <YAxis
+            stroke="#666"
+            fontSize={11}
+            tickLine={false}
+            tickFormatter={(v: number) =>
+              v >= 1000 ? `R$${Math.round(v / 1000)}k` : `R$${v}`
+            }
+          />
+          <Tooltip
+            contentStyle={{
+              background: "#0F0F0F",
+              border: "1px solid #2A2A2A",
+              borderRadius: 6,
+              fontSize: 12,
+            }}
+            formatter={(value, name) => {
+              const num = typeof value === "number" ? value : 0;
+              if (name === "revenue") {
+                return [
+                  num.toLocaleString("pt-BR", {
+                    style: "currency",
+                    currency: "BRL",
+                  }),
+                  "Receita",
+                ];
+              }
+              return [num, "Vendas"];
+            }}
+          />
+          <Bar dataKey="revenue" fill={ACCENT} radius={[3, 3, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Top Revendedores (Pillar 3 v1+v2)
 // ─────────────────────────────────────────────────────────────────────────────
 
 function TopReferrersCard({
@@ -441,6 +587,14 @@ function TopReferrersCard({
 }: {
   topReferrers: ReportDataset["topReferrers"];
 }) {
+  const fmtBRL = (cents: number) =>
+    (cents / 100).toLocaleString("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+      maximumFractionDigits: 0,
+    });
+  const hasAnyRevenue = topReferrers.some((r) => r.revenueCents > 0);
+
   return (
     <section className="rounded-lg border border-border bg-card p-4">
       <div className="mb-3 flex items-center justify-between">
@@ -471,29 +625,58 @@ function TopReferrersCard({
           {topReferrers.map((r, i) => (
             <li
               key={r.code}
-              className="grid grid-cols-[24px_1fr_auto_56px] items-center gap-3 rounded-md px-2 py-1.5 hover:bg-secondary/40"
+              className="rounded-md px-2 py-1.5 hover:bg-secondary/40"
             >
-              <span className="text-xs font-medium text-muted-foreground">
-                #{i + 1}
-              </span>
-              <span className="min-w-0 truncate">
-                <span className="font-mono text-sm text-accent">{r.code}</span>
-                {r.name ? (
-                  <span className="ml-2 text-sm text-foreground">
-                    · {r.name}
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    #{i + 1}
                   </span>
-                ) : (
-                  <span className="ml-2 text-xs italic text-muted-foreground">
-                    · não cadastrado
+                  <span className="min-w-0 truncate">
+                    <span className="font-mono text-sm text-accent">
+                      {r.code}
+                    </span>
+                    {r.name ? (
+                      <span className="ml-2 text-sm text-foreground">
+                        · {r.name}
+                      </span>
+                    ) : (
+                      <span className="ml-2 text-xs italic text-muted-foreground">
+                        · não cadastrado
+                      </span>
+                    )}
                   </span>
-                )}
-              </span>
-              <span className="font-mono text-sm tabular-nums">
-                {r.clicks.toLocaleString("pt-BR")}
-              </span>
-              <span className="text-right text-xs text-muted-foreground">
-                {r.pct}%
-              </span>
+                </div>
+                <div className="flex shrink-0 items-center gap-3 text-sm tabular-nums">
+                  <span className="text-foreground">
+                    {r.clicks.toLocaleString("pt-BR")}{" "}
+                    <span className="text-xs text-muted-foreground">
+                      cliques
+                    </span>
+                  </span>
+                  {r.sales > 0 ? (
+                    <>
+                      <span className="text-accent">
+                        {r.sales}{" "}
+                        <span className="text-xs text-accent/70">vendas</span>
+                      </span>
+                      <span className="font-semibold text-accent">
+                        {fmtBRL(r.revenueCents)}
+                      </span>
+                    </>
+                  ) : hasAnyRevenue ? (
+                    <span className="text-xs text-muted-foreground">
+                      sem vendas
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+              {r.sales > 0 ? (
+                <div className="ml-9 mt-1 text-[11px] text-muted-foreground">
+                  conversão {r.conversionRate}% · ticket médio{" "}
+                  {fmtBRL(Math.round(r.revenueCents / r.sales))}
+                </div>
+              ) : null}
             </li>
           ))}
         </ul>
