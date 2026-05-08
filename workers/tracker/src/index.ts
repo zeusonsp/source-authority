@@ -9,21 +9,15 @@
  * Worker lê esse campo no lookup do slug. Se null/vazio → 404 "empresa
  * sem destino configurado".
  *
- * Insert é fire-and-forget bounded a 200ms (ctx.waitUntil mantém o promise
- * vivo após o response; race com timeout permite o redirect ocorrer rápido
- * mesmo se PostgREST estiver lento). Falha de insert não atrapalha o
- * redirect. Tech debt: pure ctx.waitUntil sem bounded await — ver
- * memória/CLAUDE.md (Fase 3.5).
+ * Insert é fire-and-forget canônico Cloudflare: ctx.waitUntil mantém o
+ * promise vivo após o response. Redirect retorna imediatamente, sem
+ * esperar PostgREST. Falha de insert não atrapalha o redirect.
  */
 
 interface Env {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
 }
-
-// Limite pro INSERT antes de redirecionar. Insert continua em background
-// via ctx.waitUntil; redirect não fica refém da latência do PostgREST.
-const INSERT_TIMEOUT_MS = 200;
 
 interface CompanyRow {
   id: string;
@@ -71,19 +65,14 @@ export default {
 
     const event = buildEvent(request, company.id);
 
-    // Fire-and-forget com bounded await. ctx.waitUntil mantém o promise
-    // vivo após o response retornar (Cloudflare não mata o worker).
-    // Promise.race garante redirect em <=200ms mesmo em PostgREST lento.
-    const insertPromise = insertEvent(env, event).catch((err) => {
-      console.error("event insert failed:", err);
-    });
-    ctx.waitUntil(insertPromise);
-    await Promise.race([
-      insertPromise,
-      new Promise<void>((resolve) =>
-        setTimeout(resolve, INSERT_TIMEOUT_MS),
-      ),
-    ]);
+    // Pure fire-and-forget. ctx.waitUntil mantém o promise vivo após o
+    // response retornar — Cloudflare não mata o isolate enquanto o
+    // promise pendurado nele resolve. Redirect sai já-já.
+    ctx.waitUntil(
+      insertEvent(env, event).catch((err) => {
+        console.error("event insert failed:", err);
+      }),
+    );
 
     return Response.redirect(company.default_redirect_url, 302);
   },
