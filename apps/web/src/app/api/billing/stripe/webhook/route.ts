@@ -91,8 +91,6 @@ async function findCompanyByCustomer(
   const { data, error } = await supabase
     .from("companies")
     .select("id")
-    // @ts-expect-error — stripe_customer_id ainda não está em database.types
-    // (migration 0009 aplicada mas types não regenerados). Remover após gen-types.
     .eq("stripe_customer_id", customerId)
     .maybeSingle();
 
@@ -289,23 +287,28 @@ export async function POST(req: NextRequest) {
   const supabase = createAdminClient();
   const params = await buildRpcParams(event, supabase);
 
+  // Types gerados (Supabase) marcam _company_id como required string e
+  // _payload como Json estrito. Em runtime a RPC aceita null em _company_id
+  // (short-circuit no SQL pra "evento órfão"), e o payload é qualquer objeto
+  // serializável. Cast via unknown pra reconciliar.
+  const rpcArgs = {
+    _company_id: params.company_id,
+    _provider: "stripe",
+    _provider_event_id: event.id,
+    _event_type: event.type,
+    _payload: event.data.object,
+    _new_plan: params.new_plan ?? undefined,
+    _new_status: params.new_status ?? undefined,
+    _stripe_customer_id: params.customer_id ?? undefined,
+    _stripe_sub_id: params.subscription_id ?? undefined,
+    _trial_ends_at: params.trial_ends_at ?? undefined,
+    _renewed_at: params.renewed_at ?? undefined,
+  };
   const { error } = await supabase.rpc(
-    // @ts-expect-error — apply_subscription_event não está em database.types
-    // ainda (gen-types pendente). Remover após regen.
     "apply_subscription_event",
-    {
-      _company_id: params.company_id,
-      _provider: "stripe",
-      _provider_event_id: event.id,
-      _event_type: event.type,
-      _payload: event.data.object as unknown as Record<string, unknown>,
-      _new_plan: params.new_plan,
-      _new_status: params.new_status,
-      _stripe_customer_id: params.customer_id,
-      _stripe_sub_id: params.subscription_id,
-      _trial_ends_at: params.trial_ends_at,
-      _renewed_at: params.renewed_at,
-    },
+    rpcArgs as unknown as Parameters<
+      typeof supabase.rpc<"apply_subscription_event">
+    >[1],
   );
 
   if (error) {
