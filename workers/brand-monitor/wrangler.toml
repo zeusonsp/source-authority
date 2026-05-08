@@ -19,4 +19,7 @@ compatibility_date = "2026-05-08"
 enabled = true
 
 [triggers]
-crons = ["*/15 * * * *", "0 12 * * *"]
+# */15 * * * * → Cert Spotter CT log poll (B5.4)
+# 0 12 * * *   → daily digest 09:00 BRT (B5.6)
+# 0 */4 * * *  → Instagram hashtag scan, every 4h (V2.1)
+crons = ["*/15 * * * *", "0 12 * * *", "0 */4 * * *"]

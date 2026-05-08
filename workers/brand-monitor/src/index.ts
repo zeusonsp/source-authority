@@ -117,6 +117,12 @@ export default {
       // 09:00 BRT — agrega alerts das últimas 24h e dispara digest pra
       // owners+admins de cada company com brand_terms.
       await runDailyDigest(env, ctx);
+    } else if (controller.cron === "0 */4 * * *") {
+      // Every 4h — Instagram hashtag scan (V2.1). Pra cada conexão IG
+      // ativa, dispara um POST pra apps/web/api/internal/instagram/scan-hashtag
+      // pra cada hashtag_watch ativo. apps/web faz Graph API call + dHash
+      // + alert insertion.
+      await runHashtagScan(env, ctx);
     } else {
       console.warn(`[brand-monitor] unknown cron expression: ${controller.cron}`);
     }
@@ -135,8 +141,12 @@ export default {
     if (request.method === "GET" && url.pathname === "/") {
       return Response.json({
         worker: "source-authority-brand-monitor",
-        jobs: ["ct-poll (every 15min)", "daily-digest (09:00 BRT)"],
-        status: "ct-poll live — B5.4",
+        jobs: [
+          "ct-poll (every 15min)",
+          "daily-digest (09:00 BRT)",
+          "hashtag-scan (every 4h)",
+        ],
+        status: "ct-poll live + hashtag-scan V2.1",
       });
     }
 
@@ -667,4 +677,126 @@ async function runDailyDigest(env: Env, ctx: ExecutionContext): Promise<void> {
   console.log(
     `[brand-monitor] daily-digest scheduled ${companies.length} dispatches elapsed_ms=${Date.now() - startedAt}`,
   );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Hashtag scan (V2.1) — Instagram Graph API
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface InstagramConnectionRow {
+  id: string;
+  company_id: string;
+  ig_user_id: string;
+  access_token: string;
+  ig_username: string | null;
+}
+
+interface HashtagWatchRow {
+  id: string;
+  hashtag: string;
+  ig_hashtag_id: string | null;
+  last_post_cursor: string | null;
+}
+
+/**
+ * Cron 0 *\/4 * * * — pra cada conexão IG ativa, dispara um POST pra
+ * apps/web/api/internal/instagram/scan-hashtag pra cada hashtag_watch
+ * ativo. apps/web faz o trabalho pesado: Graph API call, image download,
+ * dHash, comparação com contents, alert insert.
+ *
+ * Fan-out via ctx.waitUntil — todos os watches da execução rodam em
+ * paralelo. Cap natural: max 30 watches/company × N companies, com cron
+ * de 4h dá folga grande de tempo de execução.
+ */
+async function runHashtagScan(env: Env, ctx: ExecutionContext): Promise<void> {
+  const startedAt = Date.now();
+
+  const connsRes = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/instagram_connections?status=eq.active&select=id,company_id,ig_user_id,access_token,ig_username`,
+    {
+      headers: {
+        apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      },
+    },
+  );
+  if (!connsRes.ok) {
+    console.error(
+      `[brand-monitor] hashtag-scan fetch connections failed ${connsRes.status}`,
+    );
+    return;
+  }
+  const connections = (await connsRes.json()) as InstagramConnectionRow[];
+
+  console.log(
+    `[brand-monitor] hashtag-scan starting: ${connections.length} active connections`,
+  );
+
+  let dispatchCount = 0;
+
+  for (const conn of connections) {
+    const watchesRes = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/hashtag_watches?company_id=eq.${conn.company_id}&active=eq.true&select=id,hashtag,ig_hashtag_id,last_post_cursor`,
+      {
+        headers: {
+          apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+          Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+        },
+      },
+    );
+    if (!watchesRes.ok) {
+      console.warn(
+        `[brand-monitor] hashtag-scan fetch watches for ${conn.company_id} failed ${watchesRes.status}`,
+      );
+      continue;
+    }
+    const watches = (await watchesRes.json()) as HashtagWatchRow[];
+
+    for (const watch of watches) {
+      ctx.waitUntil(dispatchHashtagScan(env, conn, watch));
+      dispatchCount += 1;
+    }
+  }
+
+  console.log(
+    `[brand-monitor] hashtag-scan dispatched=${dispatchCount} elapsed_ms=${Date.now() - startedAt}`,
+  );
+}
+
+async function dispatchHashtagScan(
+  env: Env,
+  conn: InstagramConnectionRow,
+  watch: HashtagWatchRow,
+): Promise<void> {
+  try {
+    const res = await fetch(
+      `${env.APPS_WEB_URL}/api/internal/instagram/scan-hashtag`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${env.INTERNAL_NOTIFICATIONS_SECRET}`,
+        },
+        body: JSON.stringify({
+          company_id: conn.company_id,
+          watch_id: watch.id,
+          hashtag: watch.hashtag,
+          ig_user_id: conn.ig_user_id,
+          access_token: conn.access_token,
+          ig_hashtag_id: watch.ig_hashtag_id,
+          last_post_cursor: watch.last_post_cursor,
+        }),
+      },
+    );
+    if (!res.ok) {
+      console.warn(
+        `[hashtag-scan] dispatch ${conn.company_id}/${watch.hashtag} failed ${res.status}`,
+      );
+    }
+  } catch (err) {
+    console.warn(
+      `[hashtag-scan] dispatch ${conn.company_id}/${watch.hashtag} error`,
+      err instanceof Error ? err.message : String(err),
+    );
+  }
 }
