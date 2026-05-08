@@ -482,12 +482,16 @@ async function fetchCertspotterIssuances(
   term: string,
   cursor: string | null,
 ): Promise<CertspotterIssuance[]> {
+  // Cert Spotter quer expand= como params separados, não comma-separated
+  // (a forma comma-separated é silenciosamente ignorada — response volta
+  // sem dns_names/issuer e o worker descarta tudo no extractIssuerName).
   const params = new URLSearchParams({
     domain: term,
     include_subdomains: "true",
     match_wildcards: "true",
-    expand: "dns_names,issuer",
   });
+  params.append("expand", "dns_names");
+  params.append("expand", "issuer");
   if (cursor) params.set("after", cursor);
 
   const url = `https://api.certspotter.com/v1/issuances?${params.toString()}`;
