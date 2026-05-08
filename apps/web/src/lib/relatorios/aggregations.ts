@@ -1,5 +1,6 @@
 import type {
   Bucket,
+  ConversionForAggregation,
   CountryCount,
   DateRange,
   DeviceCount,
@@ -8,6 +9,7 @@ import type {
   ReferrerCount,
   ReportDataset,
   ReportPreset,
+  RevenueBucket,
 } from "./types";
 
 const MS_HOUR = 60 * 60 * 1000;
@@ -75,6 +77,11 @@ export function aggregate(
    * mas não estão neste map ficam com `name: null` (raw).
    */
   resellerNamesByCode: Map<string, string> = new Map(),
+  /**
+   * Pillar 3 v2 — conversões no mesmo range. Atribuição já resolvida
+   * em conversions.reseller_code (denormalizada na hora do INSERT).
+   */
+  conversions: ConversionForAggregation[] = [],
 ): ReportDataset {
   const now = Date.now();
   const fromMs = new Date(range.from).getTime();
@@ -130,6 +137,44 @@ export function aggregate(
     }
   }
 
+  // ─── Pillar 3 v2: conversions aggregation ─────────────────────────────────
+  let totalConversions = 0;
+  let totalRevenueCents = 0;
+  let attributedConversions = 0;
+  const dailyRevenueMap = new Map<string, { revenue: number; sales: number }>();
+  const salesByCode = new Map<string, { sales: number; revenue: number }>();
+
+  for (const c of conversions) {
+    totalConversions += 1;
+    totalRevenueCents += Number(c.amount_cents);
+    if (c.reseller_code) {
+      attributedConversions += 1;
+      const acc = salesByCode.get(c.reseller_code) ?? {
+        sales: 0,
+        revenue: 0,
+      };
+      acc.sales += 1;
+      acc.revenue += Number(c.amount_cents);
+      salesByCode.set(c.reseller_code, acc);
+    }
+    const dayKey = isoDayKey(new Date(c.occurred_at).getTime());
+    const dr = dailyRevenueMap.get(dayKey) ?? { revenue: 0, sales: 0 };
+    dr.revenue += Number(c.amount_cents);
+    dr.sales += 1;
+    dailyRevenueMap.set(dayKey, dr);
+  }
+
+  const conversionRate =
+    total > 0 ? Math.round((totalConversions / total) * 1000) / 10 : 0;
+  const aovCents =
+    totalConversions > 0
+      ? Math.round(totalRevenueCents / totalConversions)
+      : 0;
+  const attributedPct =
+    totalConversions > 0
+      ? Math.round((attributedConversions / totalConversions) * 100)
+      : 0;
+
   return {
     range,
     kpis: {
@@ -137,9 +182,15 @@ export function aggregate(
       last24h,
       countries: countriesSet.size,
       activeDays: dayKeys.size,
+      conversions: totalConversions,
+      revenueCents: totalRevenueCents,
+      conversionRate,
+      aovCents,
+      attributedPct,
     },
     hourly: zeroFillHourly(now, hourMap),
     daily: zeroFillDaily(fromMs, toMs, dayMap),
+    dailyRevenue: zeroFillDailyRevenue(fromMs, toMs, dailyRevenueMap),
     topCountries: toSortedCountries(countryMap),
     byDevice: toSortedDevices(deviceMap),
     byLang: toSortedLabeled(langMap, 10),
@@ -148,24 +199,74 @@ export function aggregate(
       referrerCodeMap,
       referrerCodeTotal,
       resellerNamesByCode,
+      salesByCode,
     ),
   };
+}
+
+function zeroFillDailyRevenue(
+  fromMs: number,
+  toMs: number,
+  map: Map<string, { revenue: number; sales: number }>,
+): RevenueBucket[] {
+  const buckets: RevenueBucket[] = [];
+  const cursor = new Date(fromMs);
+  cursor.setUTCHours(0, 0, 0, 0);
+  const end = new Date(toMs);
+  end.setUTCHours(0, 0, 0, 0);
+  while (cursor.getTime() <= end.getTime()) {
+    const key = cursor.toISOString().slice(0, 10);
+    const v = map.get(key);
+    buckets.push({
+      bucket: key,
+      revenueCents: v?.revenue ?? 0,
+      sales: v?.sales ?? 0,
+    });
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return buckets;
 }
 
 function toSortedReferrers(
   map: Map<string, number>,
   total: number,
   names: Map<string, string>,
+  salesByCode: Map<string, { sales: number; revenue: number }>,
 ): ReferrerCount[] {
-  if (total === 0) return [];
-  return Array.from(map.entries())
-    .map(([code, clicks]) => ({
-      code,
-      name: names.get(code) ?? null,
-      clicks,
-      pct: Math.round((clicks / total) * 100),
-    }))
-    .sort((a, b) => b.clicks - a.clicks)
+  // Universe: união de codes que apareceram em events OU em sales
+  // (revendedor pode aparecer só em sales se vendas vierem antes do
+  // primeiro click no período).
+  const allCodes = new Set<string>([
+    ...map.keys(),
+    ...salesByCode.keys(),
+  ]);
+  if (allCodes.size === 0) return [];
+
+  return Array.from(allCodes)
+    .map((code) => {
+      const clicks = map.get(code) ?? 0;
+      const s = salesByCode.get(code);
+      const sales = s?.sales ?? 0;
+      const revenueCents = s?.revenue ?? 0;
+      const conversionRate =
+        clicks > 0 ? Math.round((sales / clicks) * 1000) / 10 : 0;
+      return {
+        code,
+        name: names.get(code) ?? null,
+        clicks,
+        pct: total > 0 ? Math.round((clicks / total) * 100) : 0,
+        sales,
+        revenueCents,
+        conversionRate,
+      };
+    })
+    .sort((a, b) => {
+      // Primary: revenue desc; tiebreak: clicks desc.
+      if (a.revenueCents !== b.revenueCents) {
+        return b.revenueCents - a.revenueCents;
+      }
+      return b.clicks - a.clicks;
+    })
     .slice(0, 10);
 }
 
