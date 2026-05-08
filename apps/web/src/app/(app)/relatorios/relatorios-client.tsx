@@ -3,7 +3,7 @@
 import { Download, Loader2 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import {
   Bar,
   BarChart,
@@ -30,7 +30,11 @@ import {
   type ReportPreset,
 } from "@/lib/relatorios/types";
 import { cn } from "@/lib/utils";
-import { exportEventsCSV } from "./actions";
+import {
+  exportEventsCSV,
+  getLiveStats,
+  type LiveStatsResult,
+} from "./actions";
 
 // Map é a parte mais pesada (react-simple-maps + d3-geo + topojson fetch).
 // Lazy load com ssr:false reduz o bundle do server-rendered HTML inicial.
@@ -61,6 +65,7 @@ export function RelatoriosClient({ data }: Props) {
   return (
     <div className="space-y-6">
       <DateRangeBar range={data.range} />
+      <LivePulse />
 
       {isEmpty ? (
         <EmptyState />
@@ -643,6 +648,145 @@ function BreakdownsRow({
       />
     </section>
   );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Live Pulse (Tier 2 — wow effect)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const LIVE_POLL_MS = 30_000;
+
+function LivePulse() {
+  const [stats, setStats] = useState<LiveStatsResult | null>(null);
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchOnce = async () => {
+      const result = await getLiveStats();
+      if (!cancelled) {
+        setStats(result);
+        setTick((t) => t + 1);
+      }
+    };
+    fetchOnce();
+    const interval = setInterval(fetchOnce, LIVE_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+
+  if (!stats) {
+    return (
+      <div className="rounded-lg border border-border bg-card/50 px-4 py-2.5 text-sm text-muted-foreground">
+        <span className="inline-flex items-center gap-2">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-muted-foreground/40" />
+          Carregando atividade ao vivo...
+        </span>
+      </div>
+    );
+  }
+
+  if (!stats.ok) {
+    // Falha silenciosa (não bloqueia o resto da página).
+    return null;
+  }
+
+  const isLive = stats.recentClicks > 0;
+  const lastEventAgo = stats.lastEventAt
+    ? formatRelativeTime(new Date(stats.lastEventAt))
+    : null;
+
+  return (
+    <div
+      className={cn(
+        "flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-2.5 text-sm",
+        isLive
+          ? "border-emerald-400/40 bg-emerald-400/5"
+          : "border-border bg-card/50",
+      )}
+      // tick força re-render pra animation pulse continuar viva
+      key={tick}
+    >
+      <div className="flex items-center gap-2.5">
+        <span className="relative flex h-2.5 w-2.5">
+          <span
+            className={cn(
+              "absolute inline-flex h-full w-full rounded-full opacity-75",
+              isLive ? "animate-ping bg-emerald-400" : "bg-muted-foreground/30",
+            )}
+          />
+          <span
+            className={cn(
+              "relative inline-flex h-2.5 w-2.5 rounded-full",
+              isLive ? "bg-emerald-400" : "bg-muted-foreground/40",
+            )}
+          />
+        </span>
+        <div>
+          <p className="font-medium">
+            {isLive ? (
+              <>
+                <span className="text-emerald-400">
+                  {stats.recentClicks}
+                </span>{" "}
+                {stats.recentClicks === 1 ? "clique" : "cliques"} nos últimos
+                5 min
+              </>
+            ) : (
+              <span className="text-muted-foreground">
+                Sem cliques nos últimos 5 min
+              </span>
+            )}
+          </p>
+          <p className="text-[11px] text-muted-foreground">
+            {isLive ? (
+              <>
+                {stats.countries > 0 ? (
+                  <>
+                    {stats.countries}{" "}
+                    {stats.countries === 1 ? "país" : "países"} ·{" "}
+                  </>
+                ) : null}
+                {lastEventAgo
+                  ? `último: ${lastEventAgo}`
+                  : "ao vivo"}
+              </>
+            ) : lastEventAgo ? (
+              `último clique: ${lastEventAgo}`
+            ) : (
+              "aguardando primeiro clique"
+            )}
+          </p>
+        </div>
+      </div>
+      {isLive && stats.topActiveCodes.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {stats.topActiveCodes.map((c) => (
+            <span
+              key={c.code}
+              className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2 py-0.5 text-[11px] font-medium text-emerald-400"
+            >
+              <span className="font-mono">{c.code}</span>{" "}
+              <span className="opacity-70">×{c.clicks}</span>
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function formatRelativeTime(d: Date): string {
+  const diffSec = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (diffSec < 5) return "agora";
+  if (diffSec < 60) return `há ${diffSec}s`;
+  const min = Math.floor(diffSec / 60);
+  if (min < 60) return `há ${min}min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `há ${h}h`;
+  return `há ${Math.floor(h / 24)}d`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
