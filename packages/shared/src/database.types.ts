@@ -184,6 +184,60 @@ export type Database = {
           },
         ]
       }
+      conversions: {
+        Row: {
+          amount_cents: number
+          company_id: string
+          created_at: string
+          currency: string
+          external_id: string
+          id: string
+          occurred_at: string
+          reseller_code: string | null
+          session_id: string | null
+          source_event_id: string | null
+        }
+        Insert: {
+          amount_cents: number
+          company_id: string
+          created_at?: string
+          currency?: string
+          external_id: string
+          id?: string
+          occurred_at?: string
+          reseller_code?: string | null
+          session_id?: string | null
+          source_event_id?: string | null
+        }
+        Update: {
+          amount_cents?: number
+          company_id?: string
+          created_at?: string
+          currency?: string
+          external_id?: string
+          id?: string
+          occurred_at?: string
+          reseller_code?: string | null
+          session_id?: string | null
+          source_event_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversions_source_event_id_fkey"
+            columns: ["source_event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       demo_leads: {
         Row: {
           company: string | null
@@ -252,6 +306,7 @@ export type Database = {
           lang: string | null
           referrer: string | null
           referrer_code: string | null
+          session_id: string | null
           user_agent: string | null
         }
         Insert: {
@@ -264,6 +319,7 @@ export type Database = {
           lang?: string | null
           referrer?: string | null
           referrer_code?: string | null
+          session_id?: string | null
           user_agent?: string | null
         }
         Update: {
@@ -276,6 +332,7 @@ export type Database = {
           lang?: string | null
           referrer?: string | null
           referrer_code?: string | null
+          session_id?: string | null
           user_agent?: string | null
         }
         Relationships: [
