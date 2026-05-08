@@ -5,9 +5,8 @@ import { NextResponse } from "next/server";
 import {
   exchangeCodeForToken,
   exchangeForLongLivedToken,
-  getInstagramAccountForPage,
+  getInstagramUser,
   isInstagramConfigured,
-  listUserPages,
 } from "@/lib/integrations/instagram";
 import { createClient } from "@/lib/supabase/server";
 import { env } from "@/lib/env";
@@ -15,14 +14,16 @@ import { env } from "@/lib/env";
 /**
  * GET /api/integrations/instagram/callback?code=X&state=Y
  *
- * Recebe redirect do Facebook OAuth. Faz:
- *   1. Verifica CSRF state
+ * Recebe redirect do Instagram Direct OAuth. Faz:
+ *   1. Verifica CSRF state (cookie httpOnly)
  *   2. Troca code → short-lived token (1h)
  *   3. Troca short → long-lived (60d)
- *   4. Lista pages do user
- *   5. Pra cada page, busca Instagram Business Account ligada
- *   6. Se encontrar, INSERT/UPSERT instagram_connections
- *   7. Redireciona pra /configuracoes/instagram com flash message
+ *   4. Pega user info via /me (id, username, account_type)
+ *   5. UPSERT instagram_connections
+ *   6. Redireciona pra /configuracoes/instagram com flash
+ *
+ * Diferente do flow Facebook Login → não há listagem de Pages.
+ * Conta IG Business autoriza diretamente, simplificando o callback.
  */
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -41,7 +42,7 @@ export async function GET(req: Request) {
   const error = url.searchParams.get("error");
   const errorReason = url.searchParams.get("error_reason");
 
-  // User cancelou no FB ou erro upstream.
+  // User cancelou no Instagram ou erro upstream.
   if (error) {
     const target = new URL("/configuracoes/instagram", env.NEXT_PUBLIC_APP_URL);
     target.searchParams.set("ig_error", errorReason ?? error);
@@ -91,53 +92,22 @@ export async function GET(req: Request) {
   const redirectUri = `${env.NEXT_PUBLIC_APP_URL}/api/integrations/instagram/callback`;
 
   try {
-    // Step 4: code → short-lived
     const shortLived = await exchangeCodeForToken(code, redirectUri);
-    // Step 5: short → long-lived
     const longLived = await exchangeForLongLivedToken(shortLived.access_token);
+    const igUser = await getInstagramUser(longLived.access_token);
 
-    // Step 6: descobre IG Business Account via pages
-    const pages = await listUserPages(longLived.access_token);
-    let igConn: {
-      ig_user_id: string;
-      ig_username: string;
-      fb_page_id: string;
-      fb_page_name: string;
-    } | null = null;
-
-    for (const page of pages) {
-      const ig = await getInstagramAccountForPage(page.id, page.access_token);
-      if (ig) {
-        igConn = {
-          ig_user_id: ig.ig_user_id,
-          ig_username: ig.username,
-          fb_page_id: page.id,
-          fb_page_name: page.name,
-        };
-        break;
-      }
-    }
-
-    if (!igConn) {
-      return NextResponse.redirect(
-        new URL(
-          "/configuracoes/instagram?ig_error=no_business_account",
-          env.NEXT_PUBLIC_APP_URL,
-        ),
-      );
-    }
-
-    // Step 7: UPSERT (1 conexão por empresa).
     const expiresAt = new Date(Date.now() + longLived.expires_in * 1000);
     const { error: insertErr } = await supabase
       .from("instagram_connections")
       .upsert(
         {
           company_id: m.company_id,
-          ig_user_id: igConn.ig_user_id,
-          ig_username: igConn.ig_username,
-          fb_page_id: igConn.fb_page_id,
-          fb_page_name: igConn.fb_page_name,
+          ig_user_id: igUser.id,
+          ig_username: igUser.username,
+          // fb_page_id/fb_page_name ficam null no Instagram Direct flow
+          // (não há Page intermediária).
+          fb_page_id: null,
+          fb_page_name: null,
           access_token: longLived.access_token,
           token_expires_at: expiresAt.toISOString(),
           status: "active",
