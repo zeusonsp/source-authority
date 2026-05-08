@@ -84,8 +84,8 @@ export default async function InstagramPage({
           <Alert>
             <AlertDescription>
               Integração Instagram ainda não configurada (admin precisa setar{" "}
-              <code className="font-mono">INSTAGRAM_APP_ID</code> e{" "}
-              <code className="font-mono">INSTAGRAM_APP_SECRET</code> em Vercel).
+              <code className="font-mono">META_APP_ID</code> e{" "}
+              <code className="font-mono">META_APP_SECRET</code> em Vercel).
             </AlertDescription>
           </Alert>
         ) : null}
