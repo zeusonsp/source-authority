@@ -112,6 +112,8 @@ export type Database = {
       }
       companies: {
         Row: {
+          billing_exempt: boolean
+          billing_status: string
           cnpj: string | null
           created_at: string
           created_by: string | null
@@ -120,13 +122,19 @@ export type Database = {
           name: string
           owned_domains: string[]
           plan: string
+          plan_renewed_at: string | null
           protected_brand_terms: string[]
           segment: string | null
           size: string | null
           slug: string
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          trial_ends_at: string | null
           updated_at: string
         }
         Insert: {
+          billing_exempt?: boolean
+          billing_status?: string
           cnpj?: string | null
           created_at?: string
           created_by?: string | null
@@ -135,13 +143,19 @@ export type Database = {
           name: string
           owned_domains?: string[]
           plan?: string
+          plan_renewed_at?: string | null
           protected_brand_terms?: string[]
           segment?: string | null
           size?: string | null
           slug: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          trial_ends_at?: string | null
           updated_at?: string
         }
         Update: {
+          billing_exempt?: boolean
+          billing_status?: string
           cnpj?: string | null
           created_at?: string
           created_by?: string | null
@@ -150,10 +164,14 @@ export type Database = {
           name?: string
           owned_domains?: string[]
           plan?: string
+          plan_renewed_at?: string | null
           protected_brand_terms?: string[]
           segment?: string | null
           size?: string | null
           slug?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          trial_ends_at?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -343,11 +361,68 @@ export type Database = {
         }
         Relationships: []
       }
+      subscription_events: {
+        Row: {
+          company_id: string | null
+          created_at: string
+          event_type: string
+          id: string
+          payload: Json
+          payment_provider: string
+          processed_at: string | null
+          provider_event_id: string
+        }
+        Insert: {
+          company_id?: string | null
+          created_at?: string
+          event_type: string
+          id?: string
+          payload?: Json
+          payment_provider?: string
+          processed_at?: string | null
+          provider_event_id: string
+        }
+        Update: {
+          company_id?: string | null
+          created_at?: string
+          event_type?: string
+          id?: string
+          payload?: Json
+          payment_provider?: string
+          processed_at?: string | null
+          provider_event_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_events_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      apply_subscription_event: {
+        Args: {
+          _company_id: string
+          _event_type: string
+          _new_plan?: string
+          _new_status?: string
+          _payload: Json
+          _provider: string
+          _provider_event_id: string
+          _renewed_at?: string
+          _stripe_customer_id?: string
+          _stripe_sub_id?: string
+          _trial_ends_at?: string
+        }
+        Returns: string
+      }
       create_company: {
         Args: {
           _cnpj?: string

@@ -13,10 +13,16 @@ import { env as clientEnv } from "./env";
  */
 const serverEnvSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
+  // Resend API key (re_xxx). Usado por src/lib/notifications/resend.ts pra
+  // enviar emails de alertas (immediate + daily digest). Sem SDK — fetch direto.
+  // Mesma chave já em uso pelo apps/landing (mesma conta Resend, domínio
+  // sourceauthority.com.br já verificado com DKIM+SPF).
+  RESEND_API_KEY: z.string().min(1),
 });
 
 const parsed = serverEnvSchema.safeParse({
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+  RESEND_API_KEY: process.env.RESEND_API_KEY,
 });
 
 if (!parsed.success) {
