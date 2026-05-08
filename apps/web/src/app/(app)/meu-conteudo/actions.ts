@@ -4,6 +4,11 @@ import "server-only";
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import {
+  analyzePlagio,
+  type AIPlagioResult,
+} from "@/lib/ai/analyze-plagio";
+import { isAIAvailable } from "@/lib/ai/anthropic";
 import { categorizeMatch, computeDHash, hammingDistance } from "@/lib/content/hash";
 import { fetchSource } from "@/lib/content/fetch-source";
 import { createClient } from "@/lib/supabase/server";
@@ -295,6 +300,162 @@ export async function deleteContent(input: {
 
   revalidatePath("/meu-conteudo");
   return { ok: true };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Innovation #1 — AI Plágio Narrativo
+// ─────────────────────────────────────────────────────────────────────────────
+
+const analyzeAISchema = z.object({
+  content_id: z.string().uuid(),
+  suspect_url: z.string().url().max(2000),
+});
+
+export type AIAnalyzeServerResult =
+  | {
+      ok: true;
+      verdict: AIPlagioResult["verdict"];
+      confidence: number;
+      reasoning: string;
+      cost_usd: number;
+      model: string;
+    }
+  | {
+      ok: false;
+      code: ActionFailureCode | "ai_disabled";
+      message: string;
+    };
+
+export async function checkAIAvailable(): Promise<{ available: boolean }> {
+  return { available: isAIAvailable() };
+}
+
+export async function analyzeWithAI(input: {
+  content_id: string;
+  suspect_url: string;
+}): Promise<AIAnalyzeServerResult> {
+  const parsed = analyzeAISchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, code: "validation", message: "Parâmetros inválidos." };
+  }
+
+  if (!isAIAvailable()) {
+    return {
+      ok: false,
+      code: "ai_disabled",
+      message:
+        "AI Plágio não configurada. Setá ANTHROPIC_API_KEY em Vercel pra ativar.",
+    };
+  }
+
+  const ctx = await authorizeAdmin();
+  if (!ctx) return { ok: false, code: "forbidden", message: "Sem permissão." };
+
+  const supabase = createClient();
+
+  // Fetch original content row.
+  const { data: contentRow } = await supabase
+    .from("contents")
+    .select("id, source_url, title, thumbnail_url")
+    .eq("id", parsed.data.content_id)
+    .eq("company_id", ctx.company_id)
+    .maybeSingle();
+
+  if (!contentRow || !contentRow.thumbnail_url) {
+    return {
+      ok: false,
+      code: "validation",
+      message: "Conteúdo original não encontrado ou sem thumbnail.",
+    };
+  }
+
+  // Fetch suspect.
+  const suspect = await fetchSource(parsed.data.suspect_url);
+  if (!suspect.ok) {
+    return {
+      ok: false,
+      code: suspect.reason as ActionFailureCode,
+      message: messageForReason(suspect.reason, suspect.detail),
+    };
+  }
+
+  // Fetch original thumbnail bytes (we have URL but not bytes anymore).
+  let originalImage: Buffer;
+  try {
+    const refererHost = new URL(contentRow.thumbnail_url).hostname;
+    const headers: Record<string, string> = {
+      Accept:
+        "image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8,*/*;q=0.5",
+    };
+    if (
+      refererHost.includes("cdninstagram.com") ||
+      refererHost.includes("fbcdn.net")
+    ) {
+      headers.Referer = "https://www.instagram.com/";
+    } else if (refererHost.includes("ytimg.com")) {
+      headers.Referer = "https://www.youtube.com/";
+    } else if (refererHost.includes("tiktokcdn")) {
+      headers.Referer = "https://www.tiktok.com/";
+    }
+    const res = await fetch(contentRow.thumbnail_url, { headers });
+    if (!res.ok) {
+      return {
+        ok: false,
+        code: "fetch_failed",
+        message: `Não consegui baixar thumbnail original (${res.status}).`,
+      };
+    }
+    originalImage = Buffer.from(await res.arrayBuffer());
+  } catch (err) {
+    return {
+      ok: false,
+      code: "fetch_failed",
+      message: `Falha download original: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  // Chamar Claude.
+  let aiResult: AIPlagioResult;
+  try {
+    aiResult = await analyzePlagio({
+      originalImage,
+      originalCaption: contentRow.title,
+      suspectImage: suspect.thumbnail,
+      suspectCaption: suspect.metadata.title,
+    });
+  } catch (err) {
+    console.error("[ai/analyze] error", err);
+    return {
+      ok: false,
+      code: "unknown",
+      message: `Falha na análise IA: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  // Persist em ai_analyses (audit + cost tracking).
+  await supabase.from("ai_analyses").insert({
+    company_id: ctx.company_id,
+    content_id: parsed.data.content_id,
+    suspect_url: parsed.data.suspect_url,
+    suspect_thumbnail_url: suspect.metadata.thumbnail_url,
+    model: aiResult.model,
+    verdict: aiResult.verdict,
+    confidence: aiResult.confidence,
+    reasoning: aiResult.reasoning,
+    cost_micro_usd: aiResult.costMicroUsd,
+    input_tokens: aiResult.inputTokens,
+    output_tokens: aiResult.outputTokens,
+    analyzed_by: ctx.user_id,
+  });
+
+  return {
+    ok: true,
+    verdict: aiResult.verdict,
+    confidence: aiResult.confidence,
+    reasoning: aiResult.reasoning,
+    cost_usd: aiResult.costMicroUsd / 100_000,
+    model: aiResult.model,
+  };
 }
 
 function messageForReason(reason: string, detail?: string): string {

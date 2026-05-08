@@ -14,6 +14,79 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_analyses: {
+        Row: {
+          analyzed_at: string
+          analyzed_by: string | null
+          company_id: string
+          confidence: number | null
+          content_id: string | null
+          cost_micro_usd: number | null
+          id: string
+          input_tokens: number | null
+          model: string
+          output_tokens: number | null
+          reasoning: string | null
+          suspect_thumbnail_url: string | null
+          suspect_url: string
+          verdict: string
+        }
+        Insert: {
+          analyzed_at?: string
+          analyzed_by?: string | null
+          company_id: string
+          confidence?: number | null
+          content_id?: string | null
+          cost_micro_usd?: number | null
+          id?: string
+          input_tokens?: number | null
+          model: string
+          output_tokens?: number | null
+          reasoning?: string | null
+          suspect_thumbnail_url?: string | null
+          suspect_url: string
+          verdict: string
+        }
+        Update: {
+          analyzed_at?: string
+          analyzed_by?: string | null
+          company_id?: string
+          confidence?: number | null
+          content_id?: string | null
+          cost_micro_usd?: number | null
+          id?: string
+          input_tokens?: number | null
+          model?: string
+          output_tokens?: number | null
+          reasoning?: string | null
+          suspect_thumbnail_url?: string | null
+          suspect_url?: string
+          verdict?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_analyses_analyzed_by_fkey"
+            columns: ["analyzed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_analyses_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_analyses_content_id_fkey"
+            columns: ["content_id"]
+            isOneToOne: false
+            referencedRelation: "contents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       alerts: {
         Row: {
           company_id: string

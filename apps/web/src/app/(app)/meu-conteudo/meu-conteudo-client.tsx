@@ -6,18 +6,22 @@ import {
   Loader2,
   Plus,
   Search,
+  Sparkles,
   Trash2,
 } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import {
+  analyzeWithAI,
+  checkAIAvailable,
   checkSuspect,
   deleteContent,
   registerContent,
+  type AIAnalyzeServerResult,
   type SuspectMatchResult,
 } from "./actions";
 
@@ -145,6 +149,117 @@ function CheckSuspectCard() {
   );
 }
 
+const AI_VERDICT_LABEL: Record<
+  "plagio_direto" | "inspiracao_clara" | "similar_inconclusivo" | "diferente",
+  { label: string; color: string; emoji: string }
+> = {
+  plagio_direto: {
+    label: "Plágio direto",
+    color: "text-rose-400 border-rose-400/40 bg-rose-400/10",
+    emoji: "🚨",
+  },
+  inspiracao_clara: {
+    label: "Inspiração clara",
+    color: "text-orange-400 border-orange-400/40 bg-orange-400/10",
+    emoji: "⚠️",
+  },
+  similar_inconclusivo: {
+    label: "Similar mas inconclusivo",
+    color: "text-yellow-400 border-yellow-400/40 bg-yellow-400/10",
+    emoji: "🤔",
+  },
+  diferente: {
+    label: "Conteúdo diferente",
+    color: "text-emerald-400 border-emerald-400/40 bg-emerald-400/10",
+    emoji: "✓",
+  },
+};
+
+function AIAnalysisPanel({
+  contentId,
+  suspectUrl,
+}: {
+  contentId: string;
+  suspectUrl: string;
+}) {
+  const [aiAvailable, setAiAvailable] = useState<boolean | null>(null);
+  const [analyzing, startAnalyze] = useTransition();
+  const [result, setResult] = useState<AIAnalyzeServerResult | null>(null);
+
+  useEffect(() => {
+    checkAIAvailable().then((r) => setAiAvailable(r.available));
+  }, []);
+
+  function onAnalyze() {
+    setResult(null);
+    startAnalyze(async () => {
+      const r = await analyzeWithAI({ content_id: contentId, suspect_url: suspectUrl });
+      setResult(r);
+    });
+  }
+
+  if (aiAvailable === null) {
+    return null; // Loading inicial
+  }
+  if (aiAvailable === false) {
+    return (
+      <div className="mt-3 rounded-md border border-border bg-background/40 p-3 text-[11px] text-muted-foreground">
+        🧠 <strong>Análise IA</strong> ainda não ativada. Configure
+        ANTHROPIC_API_KEY em Vercel pra usar Claude Vision na detecção de
+        plágio narrativo.
+      </div>
+    );
+  }
+
+  if (result?.ok) {
+    const v = AI_VERDICT_LABEL[result.verdict];
+    return (
+      <div className={cn("mt-3 rounded-md border-2 p-3", v.color)}>
+        <div className="mb-1 flex items-baseline justify-between gap-2">
+          <span className="text-sm font-semibold">
+            {v.emoji} IA: {v.label}
+          </span>
+          <span className="font-mono text-[11px]">
+            confiança {Math.round(result.confidence * 100)}% · custo $
+            {result.cost_usd.toFixed(4)}
+          </span>
+        </div>
+        <p className="text-[12px] leading-relaxed">{result.reasoning}</p>
+        <p className="mt-2 text-[10px] text-muted-foreground">
+          Análise via {result.model}
+        </p>
+      </div>
+    );
+  }
+
+  if (result && !result.ok) {
+    return (
+      <Alert variant="destructive" className="mt-3">
+        <AlertCircle className="size-4" />
+        <AlertDescription className="text-xs">{result.message}</AlertDescription>
+      </Alert>
+    );
+  }
+
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="outline"
+      onClick={onAnalyze}
+      disabled={analyzing}
+      className="mt-3 border-accent/40 text-accent hover:bg-accent/10"
+    >
+      {analyzing ? (
+        <Loader2 className="size-4 animate-spin" />
+      ) : (
+        <Sparkles className="size-4" />
+      )}
+      Analisar com IA (Claude Vision)
+    </Button>
+  );
+}
+
 function SuspectResultCard({ result }: { result: SuspectMatchResult }) {
   const m = result.best_match;
   return (
@@ -209,11 +324,26 @@ function SuspectResultCard({ result }: { result: SuspectMatchResult }) {
               ) : null}
             </div>
           </div>
+          <AIAnalysisPanel
+            contentId={m.content_id}
+            suspectUrl={result.suspect.url}
+          />
         </div>
       ) : (
         <div className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
-          Sem matches encontrados. Esse conteúdo provavelmente é diferente
-          dos seus originais cadastrados.
+          Sem matches encontrados via dHash. Pode ser conteúdo diferente
+          OU plágio com edits agressivos (cores, recorte, regravação) que
+          dHash não detecta. Use IA pra confirmar:
+          {result.candidates[0] ? (
+            <AIAnalysisPanel
+              contentId={result.candidates[0].content_id}
+              suspectUrl={result.suspect.url}
+            />
+          ) : (
+            <p className="mt-2 text-[11px]">
+              Cadastre originais primeiro pra IA poder comparar.
+            </p>
+          )}
         </div>
       )}
 

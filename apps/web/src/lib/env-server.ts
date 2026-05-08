@@ -18,6 +18,10 @@ const serverEnvSchema = z.object({
   // Mesma chave já em uso pelo apps/landing (mesma conta Resend, domínio
   // sourceauthority.com.br já verificado com DKIM+SPF).
   RESEND_API_KEY: z.string().min(1),
+  // Anthropic Claude API key (sk-ant-...). Opcional — feature AI Plágio
+  // (Innovation #1) só ativa quando preenchido. Quando vazio, UI esconde
+  // botão "Analisar com IA".
+  ANTHROPIC_API_KEY: z.string().optional(),
   // Shared secret pra autenticar requests do workers/brand-monitor pros
   // endpoints internos /api/internal/alerts/notify e /digest. Bearer header.
   // Gere com `openssl rand -hex 32` (32 bytes = 64 hex chars). Mesmo valor
@@ -41,6 +45,7 @@ const serverEnvSchema = z.object({
 const parsed = serverEnvSchema.safeParse({
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
   RESEND_API_KEY: process.env.RESEND_API_KEY,
+  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
   INTERNAL_NOTIFICATIONS_SECRET: process.env.INTERNAL_NOTIFICATIONS_SECRET,
   STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
   STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
