@@ -18,11 +18,17 @@ const serverEnvSchema = z.object({
   // Mesma chave já em uso pelo apps/landing (mesma conta Resend, domínio
   // sourceauthority.com.br já verificado com DKIM+SPF).
   RESEND_API_KEY: z.string().min(1),
+  // Shared secret pra autenticar requests do workers/brand-monitor pros
+  // endpoints internos /api/internal/alerts/notify e /digest. Bearer header.
+  // Gere com `openssl rand -hex 32` (32 bytes = 64 hex chars). Mesmo valor
+  // precisa estar setado no worker (wrangler secret put).
+  INTERNAL_NOTIFICATIONS_SECRET: z.string().min(32),
 });
 
 const parsed = serverEnvSchema.safeParse({
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
   RESEND_API_KEY: process.env.RESEND_API_KEY,
+  INTERNAL_NOTIFICATIONS_SECRET: process.env.INTERNAL_NOTIFICATIONS_SECRET,
 });
 
 if (!parsed.success) {

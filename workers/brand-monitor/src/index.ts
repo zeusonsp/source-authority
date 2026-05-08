@@ -10,16 +10,17 @@
  *        - skip se cert pertence a `companies.owned_domains` (allowlist)
  *        - score severity baseado em similaridade (Levenshtein + substring)
  *        - INSERT em alerts (status='new')
- *        - high-severity: log only por enquanto (B5.6 dispatch Resend).
+ *        - high-severity: ctx.waitUntil dispatch via apps/web
+ *          /api/internal/alerts/notify → email Resend imediato.
  *
- *   2. Daily 09:00 BRT: digest builder.
- *      Pra cada empresa com `alerts.status='new' AND severity IN
- *      ('medium','low') AND created_at > now()-1day`:
- *        - aggrega
- *        - manda 1 email Resend com tabela de alertas
+ *   2. Daily 09:00 BRT: digest dispatch.
+ *      Pra cada empresa com brand_terms: ctx.waitUntil POST pra apps/web
+ *      /api/internal/companies/digest. Apps/web agrega alerts das
+ *      últimas 24h e envia 1 email pra cada owner/admin.
  *
- * Estado deste arquivo: B5.4 implementa CT poll real. B5.6 implementa
- * notifications (digest + dispatch high-severity).
+ * Estado: B5.4 (CT poll) + B5.6 (notifications immediate + digest)
+ * implementados e wirados. Auth pros endpoints internal: shared bearer
+ * secret via INTERNAL_NOTIFICATIONS_SECRET.
  */
 
 interface Env {
@@ -27,6 +28,13 @@ interface Env {
   SUPABASE_SERVICE_ROLE_KEY: string;
   CERTSPOTTER_API_KEY: string;
   RESEND_API_KEY: string;
+  // URL pública do apps/web. Usado pra chamar /api/internal/alerts/notify
+  // (high severity) e /api/internal/companies/digest (cron 09:00 BRT).
+  // Prod: https://app.sourceauthority.com.br. Dev: localhost via ngrok.
+  APPS_WEB_URL: string;
+  // Bearer secret pra autenticar requests pros endpoints /api/internal/*.
+  // Mesmo valor que apps/web's INTERNAL_NOTIFICATIONS_SECRET.
+  INTERNAL_NOTIFICATIONS_SECRET: string;
 }
 
 // Limite por empresa por execução. Cada term expande pra 1 chamada Cert
@@ -78,6 +86,10 @@ interface CursorRow {
   data: { certspotter_id?: string } | null;
 }
 
+interface InsertedAlertRow {
+  id: string;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Default export — scheduled + fetch
 // ─────────────────────────────────────────────────────────────────────────────
@@ -102,8 +114,9 @@ export default {
     if (controller.cron === "*/15 * * * *") {
       await runCtPoll(env, ctx);
     } else if (controller.cron === "0 12 * * *") {
-      // B5.6: implementar runDailyDigest(env, ctx)
-      await runDailyDigestStub(env, ctx);
+      // 09:00 BRT — agrega alerts das últimas 24h e dispara digest pra
+      // owners+admins de cada company com brand_terms.
+      await runDailyDigest(env, ctx);
     } else {
       console.warn(`[brand-monitor] unknown cron expression: ${controller.cron}`);
     }
@@ -166,7 +179,7 @@ async function runCtPoll(env: Env, ctx: ExecutionContext): Promise<void> {
 
   for (const company of companies) {
     try {
-      const result = await pollCompany(env, company);
+      const result = await pollCompany(env, ctx, company);
       highSeverityCount += result.highCount;
       totalAlertsInserted += result.insertedCount;
       companiesProcessed += 1;
@@ -183,12 +196,8 @@ async function runCtPoll(env: Env, ctx: ExecutionContext): Promise<void> {
     `[brand-monitor] ct-poll done: companies_ok=${companiesProcessed} companies_failed=${companiesFailed} alerts_inserted=${totalAlertsInserted} elapsed_ms=${Date.now() - startedAt}`,
   );
   console.log(
-    `[brand-monitor] high-severity alerts inserted: ${highSeverityCount}`,
+    `[brand-monitor] high-severity alerts dispatched: ${highSeverityCount}`,
   );
-
-  // ctx parameter ainda não é usado — mantido pra paridade com runDailyDigest
-  // e pra futuro fire-and-forget de notificações em B5.6.
-  void ctx;
 }
 
 interface CompanyResult {
@@ -196,7 +205,11 @@ interface CompanyResult {
   insertedCount: number;
 }
 
-async function pollCompany(env: Env, company: CompanyRow): Promise<CompanyResult> {
+async function pollCompany(
+  env: Env,
+  ctx: ExecutionContext,
+  company: CompanyRow,
+): Promise<CompanyResult> {
   const terms = company.protected_brand_terms.slice(0, MAX_TERMS_PER_COMPANY);
   const ownedDomains = (company.owned_domains ?? []).map((d) => d.toLowerCase());
 
@@ -263,9 +276,17 @@ async function pollCompany(env: Env, company: CompanyRow): Promise<CompanyResult
       };
 
       try {
-        await insertAlert(env, payload);
+        const inserted = await insertAlert(env, payload);
         insertedCount += 1;
-        if (severity === "high") highCount += 1;
+        if (severity === "high") {
+          highCount += 1;
+          // Fire-and-forget: dispatch email immediate via apps/web. Não
+          // bloqueia o loop nem afeta o cron deadline. Falha silenciosa
+          // (digest diário pega o alert como catch-up).
+          if (inserted) {
+            ctx.waitUntil(dispatchHighSeverityEmail(env, inserted.id));
+          }
+        }
       } catch (err) {
         console.error(
           `[brand-monitor] alert insert failed company=${company.id} host="${host}":`,
@@ -345,7 +366,10 @@ async function fetchLastCertspotterCursor(
   return cursor && typeof cursor === "string" ? cursor : null;
 }
 
-async function insertAlert(env: Env, alert: AlertInsertPayload): Promise<void> {
+async function insertAlert(
+  env: Env,
+  alert: AlertInsertPayload,
+): Promise<InsertedAlertRow | null> {
   const url = `${env.SUPABASE_URL}/rest/v1/alerts`;
   const resp = await fetch(url, {
     method: "POST",
@@ -353,7 +377,10 @@ async function insertAlert(env: Env, alert: AlertInsertPayload): Promise<void> {
       apikey: env.SUPABASE_SERVICE_ROLE_KEY,
       Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
       "Content-Type": "application/json",
-      Prefer: "return=minimal",
+      // return=representation pra obter o id do row inserido — usado pro
+      // dispatch de email immediate quando severity='high'. Custo: bytes
+      // extras no response (negligible vs latência de email).
+      Prefer: "return=representation",
     },
     body: JSON.stringify(alert),
   });
@@ -361,6 +388,88 @@ async function insertAlert(env: Env, alert: AlertInsertPayload): Promise<void> {
   if (!resp.ok) {
     const text = await resp.text();
     throw new Error(`insertAlert PostgREST ${resp.status}: ${text}`);
+  }
+
+  // PostgREST retorna array (mesmo pra inserts unitários).
+  const rows = (await resp.json()) as InsertedAlertRow[];
+  return rows[0] ?? null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Notifications dispatch — chama apps/web /api/internal/*
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Fire-and-forget POST pro endpoint internal de email immediate.
+ * Apps/web faz lookup do alert + recipients e dispara via Resend.
+ *
+ * Falhas são logadas mas não throwadas — digest diário catch-up cobre.
+ */
+async function dispatchHighSeverityEmail(
+  env: Env,
+  alertId: string,
+): Promise<void> {
+  const url = `${env.APPS_WEB_URL.replace(/\/+$/, "")}/api/internal/alerts/notify`;
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.INTERNAL_NOTIFICATIONS_SECRET}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ alert_id: alertId }),
+      // Apps/web pode estar dormindo (Vercel cold start). 8s margem.
+      signal: AbortSignal.timeout(8_000),
+    });
+
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => "<no body>");
+      console.warn(
+        `[brand-monitor] notify dispatch ${resp.status} alert=${alertId}: ${text.slice(0, 200)}`,
+      );
+    }
+  } catch (err) {
+    console.warn(
+      `[brand-monitor] notify dispatch failed alert=${alertId}:`,
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+}
+
+/**
+ * Fire-and-forget POST pro endpoint internal de digest. Apps/web agrega
+ * alerts das últimas 24h pra company e manda 1 email pra cada owner/admin.
+ *
+ * Sem alerts → noop silencioso (NotifyResult.sent=0).
+ */
+async function dispatchCompanyDigest(
+  env: Env,
+  companyId: string,
+): Promise<void> {
+  const url = `${env.APPS_WEB_URL.replace(/\/+$/, "")}/api/internal/companies/digest`;
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.INTERNAL_NOTIFICATIONS_SECRET}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ company_id: companyId }),
+      // Digest pode iterar 50+ alerts → 50+ emails. Generoso.
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => "<no body>");
+      console.warn(
+        `[brand-monitor] digest dispatch ${resp.status} company=${companyId}: ${text.slice(0, 200)}`,
+      );
+    }
+  } catch (err) {
+    console.warn(
+      `[brand-monitor] digest dispatch failed company=${companyId}:`,
+      err instanceof Error ? err.message : String(err),
+    );
   }
 }
 
@@ -511,23 +620,42 @@ function isOwnedDomain(host: string, ownedDomains: string[]): boolean {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Daily digest (B5.6) — stub
+// Daily digest (B5.6)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Stub: B5.6 implementa digest diário real.
+ * Cron 09:00 BRT (12:00 UTC) — chama apps/web /api/internal/companies/digest
+ * pra cada company com brand terms. Endpoint agrega alerts das últimas 24h
+ * e envia 1 email por owner/admin.
  *
- * Plano:
- *   1. Pra cada empresa com alertas new+medium/low nas últimas 24h:
- *      - aggregate group by type/severity
- *      - render HTML email (template Source Authority dark/dourado)
- *      - send via Resend pra owners+admins (SELECT memberships JOIN profiles)
+ * Estratégia: dispara fire-and-forget pra cada company via ctx.waitUntil.
+ * Mesmo se uma falhar, as outras seguem. Cron deadline da Cloudflare é 30s
+ * pra Free, 15min pra Workers Paid — 30 companies em paralelo cabem.
  */
-async function runDailyDigestStub(
-  _env: Env,
-  _ctx: ExecutionContext,
-): Promise<void> {
+async function runDailyDigest(env: Env, ctx: ExecutionContext): Promise<void> {
+  const startedAt = Date.now();
+
+  let companies: CompanyRow[];
+  try {
+    companies = await fetchCompaniesWithTerms(env);
+  } catch (err) {
+    console.error(
+      "[brand-monitor] daily-digest fetchCompanies failed:",
+      err instanceof Error ? err.message : String(err),
+    );
+    return;
+  }
+
   console.log(
-    "[brand-monitor] runDailyDigestStub — TODO B5.6: digest builder",
+    `[brand-monitor] daily-digest dispatching to ${companies.length} companies`,
+  );
+
+  // Promise.all + waitUntil — Cloudflare mantém event loop até concluir.
+  for (const company of companies) {
+    ctx.waitUntil(dispatchCompanyDigest(env, company.id));
+  }
+
+  console.log(
+    `[brand-monitor] daily-digest scheduled ${companies.length} dispatches elapsed_ms=${Date.now() - startedAt}`,
   );
 }
