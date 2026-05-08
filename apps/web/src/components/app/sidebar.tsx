@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   Link2,
   Settings,
+  Users,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -44,6 +45,12 @@ const NAV_ITEMS: readonly NavItem[] = [
     href: "/relatorios",
     label: "Relatórios",
     icon: FileBarChart,
+    badge: null,
+  },
+  {
+    href: "/revendedores",
+    label: "Revendedores",
+    icon: Users,
     badge: null,
   },
   {

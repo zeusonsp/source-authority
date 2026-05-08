@@ -251,6 +251,7 @@ export type Database = {
           ip_country: string | null
           lang: string | null
           referrer: string | null
+          referrer_code: string | null
           user_agent: string | null
         }
         Insert: {
@@ -262,6 +263,7 @@ export type Database = {
           ip_country?: string | null
           lang?: string | null
           referrer?: string | null
+          referrer_code?: string | null
           user_agent?: string | null
         }
         Update: {
@@ -273,6 +275,7 @@ export type Database = {
           ip_country?: string | null
           lang?: string | null
           referrer?: string | null
+          referrer_code?: string | null
           user_agent?: string | null
         }
         Relationships: [
@@ -360,6 +363,51 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      reseller_codes: {
+        Row: {
+          code: string
+          company_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+          notes: string | null
+        }
+        Insert: {
+          code: string
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+        }
+        Update: {
+          code?: string
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reseller_codes_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reseller_codes_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       subscription_events: {
         Row: {
