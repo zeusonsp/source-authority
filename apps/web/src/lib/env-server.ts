@@ -26,6 +26,9 @@ const serverEnvSchema = z.object({
   // Opcional — quando vazio, UI esconde "Conectar Instagram".
   META_APP_ID: z.string().optional(),
   META_APP_SECRET: z.string().optional(),
+  // Configuration ID do "Login do Facebook para Empresas" criado no Meta.
+  // OAuth novo flow usa config_id em vez de scope na URL.
+  META_LOGIN_CONFIG_ID: z.string().optional(),
   // Shared secret pra autenticar requests do workers/brand-monitor pros
   // endpoints internos /api/internal/alerts/notify e /digest. Bearer header.
   // Gere com `openssl rand -hex 32` (32 bytes = 64 hex chars). Mesmo valor
@@ -52,6 +55,7 @@ const parsed = serverEnvSchema.safeParse({
   ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
   META_APP_ID: process.env.META_APP_ID,
   META_APP_SECRET: process.env.META_APP_SECRET,
+  META_LOGIN_CONFIG_ID: process.env.META_LOGIN_CONFIG_ID,
   INTERNAL_NOTIFICATIONS_SECRET: process.env.INTERNAL_NOTIFICATIONS_SECRET,
   STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
   STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
