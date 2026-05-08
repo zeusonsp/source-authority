@@ -161,12 +161,7 @@ async function notifyLead(payload: {
   const html = renderLeadEmail(payload);
 
   const result = await sendResendEmail({
-    // TODO(B3): trocar pra noreply@sourceauthority.com.br após DNS
-    // (SPF/DKIM) configurados no Cloudflare.
-    from: "Source Authority <onboarding@resend.dev>",
-    // TODO(B3): trocar destino pra nathanturra_r@hotmail.com após
-    // domain verification em sourceauthority.com.br (Resend free
-    // sandbox só permite enviar pro e-mail da conta).
+    from: "Source Authority <noreply@sourceauthority.com.br>",
     to: env.LEADS_NOTIFICATION_EMAIL,
     subject,
     html,
