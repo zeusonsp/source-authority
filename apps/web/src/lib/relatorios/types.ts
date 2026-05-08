@@ -93,6 +93,16 @@ export type ReportDataset = {
    * (ex: range customizado super antigo). UI computa deltas no client.
    */
   kpisPrevious: ReportDataset["kpis"] | null;
+  /**
+   * Tier 2 — heatmap 7×24 de clicks por (dia da semana × hora do dia)
+   * em BRT (UTC-3). Útil pra detectar padrões temporais ("vendo mais
+   * domingo 21h") e otimizar timing de posts.
+   *
+   * heatmap[dow][hour] = clicks. dow: 0=Dom .. 6=Sáb. hour: 0-23.
+   */
+  heatmap: number[][];
+  /** Pico (maior valor no grid) — usado pra normalizar cores no client. */
+  heatmapPeak: number;
 };
 
 export type RevenueBucket = {
