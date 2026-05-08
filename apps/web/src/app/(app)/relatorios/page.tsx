@@ -33,13 +33,26 @@ export default async function RelatoriosPage({ searchParams }: PageProps) {
   // virar gargalo medido.
   const { data: events } = await supabase
     .from("events")
-    .select("created_at, ip_country, device, lang, referrer")
+    .select(
+      "created_at, ip_country, device, lang, referrer, referrer_code",
+    )
     .eq("company_id", membership.company_id)
     .gte("created_at", range.from)
     .lte("created_at", range.to)
     .order("created_at", { ascending: false });
 
-  const data = aggregate(range, events ?? []);
+  // Pillar 3 — fetch reseller code → name map pra hidratar topReferrers.
+  const { data: resellerCodes } = await supabase
+    .from("reseller_codes")
+    .select("code, name")
+    .eq("company_id", membership.company_id);
+
+  const resellerNamesByCode = new Map<string, string>();
+  for (const r of resellerCodes ?? []) {
+    resellerNamesByCode.set(r.code, r.name);
+  }
+
+  const data = aggregate(range, events ?? [], resellerNamesByCode);
 
   return (
     <div className="container py-8">
