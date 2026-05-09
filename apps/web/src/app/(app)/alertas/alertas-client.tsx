@@ -2,19 +2,28 @@
 
 import {
   AlertTriangle,
+  Check,
+  ExternalLink,
   Globe2,
+  ImageOff,
+  ImagePlus,
   Lock,
   Radar,
   ShieldCheck,
   Sparkles,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useTransition } from "react";
 import {
   ALERT_SEVERITY_LABEL,
   ALERT_STATUSES,
   ALERT_STATUS_LABEL,
   ALERT_TYPE_LABEL,
+  ALERT_TYPES,
+  DISCOVERY_ENGINE_LABEL,
+  getContentRepostData,
   getCtLogMatchData,
   getDomainSquatData,
   getMentionData,
@@ -25,12 +34,15 @@ import {
 } from "@/lib/alerts/types";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { triageAlert } from "./actions";
 
 type Props = {
   alerts: AlertRow[];
   counts: { total: number; new: number; high: number };
   tableMissing: boolean;
   currentStatus: AlertStatus | "all";
+  currentType: AlertType | "all";
+  canEdit: boolean;
 };
 
 export function AlertasClient({
@@ -38,23 +50,29 @@ export function AlertasClient({
   counts,
   tableMissing,
   currentStatus,
+  currentType,
+  canEdit,
 }: Props) {
   if (tableMissing) {
     return <ComingSoon />;
   }
 
-  if (alerts.length === 0 && currentStatus === "all") {
+  if (
+    alerts.length === 0 &&
+    currentStatus === "all" &&
+    currentType === "all"
+  ) {
     return <NoAlertsYet />;
   }
 
   return (
     <div className="space-y-6">
       <KpiGrid counts={counts} />
-      <StatusFilter currentStatus={currentStatus} />
+      <Filters currentStatus={currentStatus} currentType={currentType} />
       {alerts.length === 0 ? (
-        <EmptyForFilter status={currentStatus} />
+        <EmptyForFilter status={currentStatus} type={currentType} />
       ) : (
-        <AlertsList alerts={alerts} />
+        <AlertsList alerts={alerts} canEdit={canEdit} />
       )}
     </div>
   );
@@ -139,59 +157,109 @@ function KpiGrid({
   );
 }
 
-function StatusFilter({ currentStatus }: { currentStatus: AlertStatus | "all" }) {
+function Filters({
+  currentStatus,
+  currentType,
+}: {
+  currentStatus: AlertStatus | "all";
+  currentType: AlertType | "all";
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  function setStatus(status: AlertStatus | "all") {
+  function setParam(key: "status" | "type", value: string) {
     const params = new URLSearchParams(searchParams?.toString() ?? "");
-    if (status === "all") {
-      params.delete("status");
+    if (value === "all") {
+      params.delete(key);
     } else {
-      params.set("status", status);
+      params.set(key, value);
     }
     const qs = params.toString();
     router.push(`/alertas${qs ? `?${qs}` : ""}`);
   }
 
-  const items: ReadonlyArray<{ key: AlertStatus | "all"; label: string }> = [
+  const statusItems: ReadonlyArray<{
+    key: AlertStatus | "all";
+    label: string;
+  }> = [
     { key: "all", label: "Todos" },
     ...ALERT_STATUSES.map((s) => ({ key: s, label: ALERT_STATUS_LABEL[s] })),
   ];
 
+  const typeItems: ReadonlyArray<{ key: AlertType | "all"; label: string }> = [
+    { key: "all", label: "Qualquer tipo" },
+    ...ALERT_TYPES.map((t) => ({ key: t, label: ALERT_TYPE_LABEL[t] })),
+  ];
+
   return (
-    <div className="flex flex-wrap gap-2 rounded-lg border border-border bg-card p-3">
-      {items.map((it) => (
-        <Button
-          key={it.key}
-          type="button"
-          variant={currentStatus === it.key ? "default" : "outline"}
-          size="sm"
-          onClick={() => setStatus(it.key)}
-        >
-          {it.label}
-        </Button>
-      ))}
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2 rounded-lg border border-border bg-card p-3">
+        <span className="self-center text-[10px] uppercase tracking-wide text-muted-foreground">
+          Status:
+        </span>
+        {statusItems.map((it) => (
+          <Button
+            key={it.key}
+            type="button"
+            variant={currentStatus === it.key ? "default" : "outline"}
+            size="sm"
+            onClick={() => setParam("status", it.key)}
+          >
+            {it.label}
+          </Button>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-2 rounded-lg border border-border bg-card p-3">
+        <span className="self-center text-[10px] uppercase tracking-wide text-muted-foreground">
+          Tipo:
+        </span>
+        {typeItems.map((it) => (
+          <Button
+            key={it.key}
+            type="button"
+            variant={currentType === it.key ? "default" : "outline"}
+            size="sm"
+            onClick={() => setParam("type", it.key)}
+          >
+            {it.label}
+          </Button>
+        ))}
+      </div>
     </div>
   );
 }
 
-function EmptyForFilter({ status }: { status: AlertStatus | "all" }) {
+function EmptyForFilter({
+  status,
+  type,
+}: {
+  status: AlertStatus | "all";
+  type: AlertType | "all";
+}) {
+  const statusLabel =
+    status === "all" ? "qualquer status" : ALERT_STATUS_LABEL[status];
+  const typeLabel =
+    type === "all" ? "qualquer tipo" : ALERT_TYPE_LABEL[type];
   return (
     <section className="rounded-lg border border-dashed border-border bg-card/40 p-8 text-center">
       <p className="text-sm text-muted-foreground">
-        Nenhum alerta com status &ldquo;
-        {status === "all" ? "qualquer" : ALERT_STATUS_LABEL[status]}&rdquo;.
+        Nenhum alerta com {statusLabel} / {typeLabel}.
       </p>
     </section>
   );
 }
 
-function AlertsList({ alerts }: { alerts: AlertRow[] }) {
+function AlertsList({
+  alerts,
+  canEdit,
+}: {
+  alerts: AlertRow[];
+  canEdit: boolean;
+}) {
   return (
     <section className="space-y-3">
       {alerts.map((a) => (
-        <AlertCard key={a.id} alert={a} />
+        <AlertCard key={a.id} alert={a} canEdit={canEdit} />
       ))}
     </section>
   );
@@ -202,6 +270,7 @@ const TYPE_ICONS: Record<AlertType, typeof AlertTriangle> = {
   ct_log_match: Lock,
   dns_anomaly: Radar,
   mention: Sparkles,
+  content_repost: ImagePlus,
 };
 
 const SEVERITY_STYLES: Record<AlertSeverity, string> = {
@@ -210,7 +279,13 @@ const SEVERITY_STYLES: Record<AlertSeverity, string> = {
   low: "border-border bg-card/40 text-muted-foreground",
 };
 
-function AlertCard({ alert }: { alert: AlertRow }) {
+function AlertCard({
+  alert,
+  canEdit,
+}: {
+  alert: AlertRow;
+  canEdit: boolean;
+}) {
   const Icon = TYPE_ICONS[alert.type];
   const fmt = new Intl.DateTimeFormat("pt-BR", {
     dateStyle: "short",
@@ -219,7 +294,10 @@ function AlertCard({ alert }: { alert: AlertRow }) {
   });
 
   return (
-    <article className="flex gap-4 rounded-lg border border-border bg-card p-5 transition-colors hover:border-border/80">
+    <article
+      id={`alert-${alert.id}`}
+      className="flex gap-4 rounded-lg border border-border bg-card p-5 transition-colors hover:border-border/80"
+    >
       <div
         className={cn(
           "flex size-10 shrink-0 items-center justify-center rounded-lg ring-1",
@@ -255,8 +333,63 @@ function AlertCard({ alert }: { alert: AlertRow }) {
         <div className="mt-2 text-sm text-muted-foreground">
           <AlertBody alert={alert} />
         </div>
+
+        {canEdit && alert.status === "new" ? (
+          <TriageActions alertId={alert.id} />
+        ) : null}
       </div>
     </article>
+  );
+}
+
+function TriageActions({ alertId }: { alertId: string }) {
+  const [pending, startTransition] = useTransition();
+
+  function setStatus(status: AlertStatus) {
+    if (pending) return;
+    startTransition(async () => {
+      const r = await triageAlert({ id: alertId, status });
+      if (!r.ok) {
+        // Erro silencioso pra não quebrar UX; logado em server.
+        console.warn("[/alertas] triage failed:", r.message);
+      }
+    });
+  }
+
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        onClick={() => setStatus("resolved")}
+        disabled={pending}
+        className="border-destructive/40 text-destructive hover:bg-destructive/10"
+      >
+        <Check className="mr-1 size-3.5" />
+        Confirmar violação
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        onClick={() => setStatus("dismissed")}
+        disabled={pending}
+      >
+        <X className="mr-1 size-3.5" />
+        Marcar falso positivo
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        onClick={() => setStatus("triaged")}
+        disabled={pending}
+        className="text-muted-foreground"
+      >
+        Marcar como visto
+      </Button>
+    </div>
   );
 }
 
@@ -305,9 +438,183 @@ function AlertBody({ alert }: { alert: AlertRow }) {
       </span>
     );
   }
+  if (alert.type === "content_repost") {
+    return <ContentRepostBody alert={alert} />;
+  }
   return (
     <span className="text-xs">
       Anomalia detectada por <code>{alert.source}</code>.
     </span>
+  );
+}
+
+function ContentRepostBody({ alert }: { alert: AlertRow }) {
+  const d = getContentRepostData(alert.data);
+  if (!d) {
+    return (
+      <span className="text-xs">
+        Repost detectado, mas payload incompleto. Fonte:{" "}
+        <code>{alert.source}</code>.
+      </span>
+    );
+  }
+
+  const similarityPct = `${Math.round(d.similarity_score * 100)}%`;
+  const engineLabel =
+    (d.discovery_engine && DISCOVERY_ENGINE_LABEL[d.discovery_engine]) ||
+    d.discovery_engine ||
+    alert.source;
+
+  return (
+    <div className="space-y-3">
+      {/* Linha 1: similarity + hamming distance */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+        <span className="font-medium text-foreground">
+          {similarityPct} similar
+        </span>
+        <span className="text-muted-foreground">
+          (Hamming distance: {d.hamming_distance}/64)
+        </span>
+      </div>
+
+      {/* Linha 2: hashtag + discovery engine */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+        {d.hashtag ? (
+          <span className="rounded-full border border-accent/30 bg-accent/10 px-2 py-0.5 font-mono text-[10px] text-accent">
+            #{d.hashtag}
+          </span>
+        ) : null}
+        <span>
+          Detectado via{" "}
+          <span className="text-foreground/80">{engineLabel}</span>
+        </span>
+      </div>
+
+      {/* Linha 3: side-by-side comparison */}
+      <div className="grid grid-cols-2 gap-3">
+        <ComparisonCard
+          label="Seu original"
+          host={null}
+          title={d.matched_content_title}
+          thumbnail={null}
+          variant="own"
+        />
+        <ComparisonCard
+          label="Post suspeito"
+          host={d.suspect_host}
+          title={d.suspect_title}
+          thumbnail={d.suspect_thumbnail}
+          variant="suspect"
+        />
+      </div>
+
+      {/* Linha 4: snippet do suspeito (se houver) */}
+      {d.suspect_snippet ? (
+        <p className="rounded-md border border-border bg-background/40 p-3 text-xs italic text-muted-foreground">
+          &ldquo;
+          {d.suspect_snippet.length > 200
+            ? `${d.suspect_snippet.slice(0, 200)}…`
+            : d.suspect_snippet}
+          &rdquo;
+        </p>
+      ) : null}
+
+      {/* Linha 5: links de ação */}
+      <div className="flex flex-wrap gap-3 text-xs">
+        <a
+          href={d.suspect_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 text-accent underline-offset-4 hover:underline"
+        >
+          <ExternalLink className="size-3.5" />
+          Ver post suspeito
+        </a>
+        <Link
+          href={`/meu-conteudo#content-${d.matched_content_id}`}
+          className="inline-flex items-center gap-1.5 text-foreground/80 underline-offset-4 hover:underline"
+        >
+          Ver meu original
+        </Link>
+        {d.matched_content_url ? (
+          <a
+            href={d.matched_content_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-muted-foreground underline-offset-4 hover:underline"
+          >
+            <ExternalLink className="size-3.5" />
+            Abrir original
+          </a>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function ComparisonCard({
+  label,
+  host,
+  title,
+  thumbnail,
+  variant,
+}: {
+  label: string;
+  host: string | null;
+  title: string | null;
+  thumbnail: string | null;
+  variant: "own" | "suspect";
+}) {
+  const borderClass =
+    variant === "suspect"
+      ? "border-destructive/30"
+      : "border-accent/30";
+  return (
+    <div
+      className={cn(
+        "overflow-hidden rounded-md border bg-background/40",
+        borderClass,
+      )}
+    >
+      <div className="aspect-square w-full bg-secondary/30">
+        {thumbnail ? (
+          // Thumbnails vêm de hosts variados (instagram cdn, tiktok, serpapi),
+          // não dá pra alistar todos no next/image — `<img>` puro é o caminho.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={thumbnail}
+            alt={title ?? label}
+            loading="lazy"
+            className="h-full w-full object-cover"
+            onError={(e) => {
+              e.currentTarget.style.display = "none";
+            }}
+          />
+        ) : (
+          <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-muted-foreground">
+            <ImageOff className="size-5" />
+            <span className="text-[10px] uppercase tracking-wide">
+              Sem thumbnail
+            </span>
+          </div>
+        )}
+      </div>
+      <div className="space-y-1 p-2">
+        <p
+          className={cn(
+            "text-[10px] font-medium uppercase tracking-wide",
+            variant === "suspect" ? "text-destructive" : "text-accent",
+          )}
+        >
+          {label}
+        </p>
+        {host ? (
+          <p className="font-mono text-xs text-foreground">{host}</p>
+        ) : null}
+        {title ? (
+          <p className="line-clamp-2 text-xs text-muted-foreground">{title}</p>
+        ) : null}
+      </div>
+    </div>
   );
 }

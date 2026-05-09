@@ -2,8 +2,10 @@ import { redirect } from "next/navigation";
 import { requireAuth } from "@/lib/auth/server";
 import {
   ALERT_STATUSES,
+  ALERT_TYPES,
   type AlertRow,
   type AlertStatus,
+  type AlertType,
 } from "@/lib/alerts/types";
 import { createClient } from "@/lib/supabase/server";
 import { AlertasClient } from "./alertas-client";
@@ -13,7 +15,7 @@ export const metadata = {
 };
 
 type PageProps = {
-  searchParams?: { status?: string };
+  searchParams?: { status?: string; type?: string };
 };
 
 export default async function AlertasPage({ searchParams }: PageProps) {
@@ -29,11 +31,21 @@ export default async function AlertasPage({ searchParams }: PageProps) {
     redirect("/onboarding");
   }
   const membership = memberships[0]!;
+  const canEdit =
+    membership.role === "owner" || membership.role === "admin";
 
   const statusFilter: AlertStatus | "all" = ((): AlertStatus | "all" => {
     const s = searchParams?.status;
     if (s && (ALERT_STATUSES as readonly string[]).includes(s)) {
       return s as AlertStatus;
+    }
+    return "all";
+  })();
+
+  const typeFilter: AlertType | "all" = ((): AlertType | "all" => {
+    const t = searchParams?.type;
+    if (t && (ALERT_TYPES as readonly string[]).includes(t)) {
+      return t as AlertType;
     }
     return "all";
   })();
@@ -55,6 +67,9 @@ export default async function AlertasPage({ searchParams }: PageProps) {
 
   if (statusFilter !== "all") {
     query.eq("status", statusFilter);
+  }
+  if (typeFilter !== "all") {
+    query.eq("type", typeFilter);
   }
 
   const { data, error } = await query;
@@ -82,8 +97,8 @@ export default async function AlertasPage({ searchParams }: PageProps) {
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">Alertas</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Detecção de uso indevido da marca: domínios sound-alike,
-            certificados SSL suspeitos e menções na web.
+            Detecção de uso indevido da marca: reposts de conteúdo, domínios
+            sound-alike, certificados SSL suspeitos e menções na web.
           </p>
         </div>
 
@@ -92,6 +107,8 @@ export default async function AlertasPage({ searchParams }: PageProps) {
           counts={counts}
           tableMissing={tableMissing}
           currentStatus={statusFilter}
+          currentType={typeFilter}
+          canEdit={canEdit}
         />
       </div>
     </div>

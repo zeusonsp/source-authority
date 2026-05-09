@@ -14,6 +14,7 @@ export const ALERT_TYPES = [
   "ct_log_match",
   "dns_anomaly",
   "mention",
+  "content_repost",
 ] as const;
 export type AlertType = (typeof ALERT_TYPES)[number];
 
@@ -51,6 +52,7 @@ export const ALERT_TYPE_LABEL: Record<AlertType, string> = {
   ct_log_match: "Certificado SSL suspeito",
   dns_anomaly: "Anomalia DNS",
   mention: "Menção na web",
+  content_repost: "Repost detectado",
 };
 
 export const ALERT_SEVERITY_LABEL: Record<AlertSeverity, string> = {
@@ -114,3 +116,113 @@ export function getMentionData(data: Record<string, unknown>): {
     snippet: typeof data.snippet === "string" ? data.snippet : undefined,
   };
 }
+
+/**
+ * Extrai payload type-safe de alertas `content_repost`.
+ *
+ * Inserido por dois caminhos hoje:
+ *   1. `/api/internal/content/reverse-search` (SerpAPI Google Reverse Image)
+ *   2. `/api/internal/instagram/scan-hashtag` (IG Graph hashtag scanner)
+ *
+ * Schema documentado em CLAUDE.md / migration 0017. Os dois caminhos compartilham
+ * `matched_content_id`, `hamming_distance`, `similarity_score`. Reverse search
+ * tem `suspect_url`/`suspect_host`/`suspect_thumbnail`; hashtag scan usa
+ * `ig_post_url`/`ig_post_username`/`thumbnail_url`. Normalizamos pra forma única
+ * pra UI não precisar saber a origem (apesar de `discovery_engine` indicar).
+ */
+export function getContentRepostData(data: Record<string, unknown>): {
+  suspect_url: string;
+  suspect_host: string | null;
+  suspect_title: string | null;
+  suspect_thumbnail: string | null;
+  suspect_snippet: string | null;
+  matched_content_id: string;
+  matched_content_title: string | null;
+  matched_content_url: string | null;
+  hamming_distance: number;
+  similarity_score: number;
+  discovery_engine: string | null;
+  hashtag: string | null;
+} | null {
+  // Aceita ambos schemas: SerpAPI (suspect_*) e IG hashtag scan (ig_post_*).
+  const suspect_url =
+    typeof data.suspect_url === "string"
+      ? data.suspect_url
+      : typeof data.ig_post_url === "string"
+        ? data.ig_post_url
+        : null;
+  const matched_content_id =
+    typeof data.matched_content_id === "string"
+      ? data.matched_content_id
+      : null;
+  const hamming_distance =
+    typeof data.hamming_distance === "number" ? data.hamming_distance : null;
+  const similarity_score =
+    typeof data.similarity_score === "number" ? data.similarity_score : null;
+
+  if (
+    !suspect_url ||
+    !matched_content_id ||
+    hamming_distance === null ||
+    similarity_score === null
+  ) {
+    return null;
+  }
+
+  // Host: prefere campo explícito, senão tenta derivar via URL parse.
+  let suspect_host: string | null =
+    typeof data.suspect_host === "string" ? data.suspect_host : null;
+  if (!suspect_host) {
+    try {
+      suspect_host = new URL(suspect_url).hostname;
+    } catch {
+      suspect_host = null;
+    }
+  }
+
+  const suspect_thumbnail =
+    typeof data.suspect_thumbnail === "string"
+      ? data.suspect_thumbnail
+      : typeof data.thumbnail_url === "string"
+        ? data.thumbnail_url
+        : null;
+
+  return {
+    suspect_url,
+    suspect_host,
+    suspect_title:
+      typeof data.suspect_title === "string" ? data.suspect_title : null,
+    suspect_thumbnail,
+    suspect_snippet:
+      typeof data.suspect_snippet === "string"
+        ? data.suspect_snippet
+        : typeof data.ig_post_caption === "string"
+          ? data.ig_post_caption
+          : null,
+    matched_content_id,
+    matched_content_title:
+      typeof data.matched_content_title === "string"
+        ? data.matched_content_title
+        : null,
+    matched_content_url:
+      typeof data.matched_content_url === "string"
+        ? data.matched_content_url
+        : null,
+    hamming_distance,
+    similarity_score,
+    discovery_engine:
+      typeof data.discovery_engine === "string"
+        ? data.discovery_engine
+        : null,
+    hashtag: typeof data.hashtag === "string" ? data.hashtag : null,
+  };
+}
+
+/**
+ * Map técnico → humano pra `discovery_engine`. Fallback retorna o slug original.
+ */
+export const DISCOVERY_ENGINE_LABEL: Record<string, string> = {
+  serpapi_google_reverse_image: "Google Reverse Image",
+  instagram_hashtag: "Instagram Hashtag",
+  instagram_graph: "Instagram Graph",
+};
