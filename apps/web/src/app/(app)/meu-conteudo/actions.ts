@@ -707,9 +707,9 @@ function messageForReason(reason: string, detail?: string): string {
     case "platform_unsupported":
       return "Plataforma não suportada nessa versão.";
     case "fetch_failed":
-      return `Não consegui acessar a URL. ${detail ?? ""}`.trim();
+      return `Não consegui acessar a URL. ${detail ?? ""} Se for Instagram, use a aba "Upload de imagem" — IG bloqueia captura automática de posts de terceiros.`.trim();
     case "no_thumbnail":
-      return "Não encontrei imagem de preview no post. Pode ser conteúdo apenas-texto ou link quebrado.";
+      return 'Instagram bloqueou captura automática deste post (eles renderizam via JavaScript pra evitar scrapers). 👉 SOLUÇÃO: tira print da capa do post e usa a aba "Upload de imagem" acima — funciona idêntica e a IA Vision compara perfeito.';
     case "private_post":
       return "Este post parece ser privado — só consigo cadastrar conteúdo público.";
     default:
