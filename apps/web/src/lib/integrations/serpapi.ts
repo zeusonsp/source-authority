@@ -43,26 +43,39 @@ export function isSerpApiConfigured(): boolean {
   return Boolean(env.SERPAPI_KEY);
 }
 
+export type ReverseSearchEngine = "google" | "bing" | "yandex";
+
 /**
- * Google Reverse Image Search.
+ * Multi-engine reverse image search.
  *
- * SerpAPI normaliza Google's reverse image em 3 listas potenciais:
- *   - image_results (default top results)
- *   - inline_images (inline carousel)
- *   - pages_with_matching_images (matching images section)
+ * Engines suportados:
+ *   - **Google** (`google_reverse_image`): cobre web inteira, mas Instagram
+ *     mal indexado.
+ *   - **Bing** (`bing_visual_search`): tradicionalmente melhor cobertura de
+ *     redes sociais que o Google.
+ *   - **Yandex** (`yandex_images`): excepcional pra encontrar visuals
+ *     similares mesmo com cropping/edição (algoritmo deep learning forte).
  *
- * Concatenamos as 3 e dedupemos por URL pra cobrir tudo.
+ * Pra MVP de detecção de plágio, fazer scan em todos 3 e mergir resultados
+ * dá cobertura máxima sem aumentar muito o consumo (3 searches por scan).
  */
 export async function reverseImageSearch(
   imageUrl: string,
+  engine: ReverseSearchEngine = "google",
 ): Promise<SerpApiImageResult[]> {
   if (!env.SERPAPI_KEY) throw new Error("SERPAPI_KEY missing");
 
+  const engineConfig = {
+    google: { engine: "google_reverse_image", urlParam: "image_url" },
+    bing: { engine: "bing_visual_search", urlParam: "image_url" },
+    yandex: { engine: "yandex_images", urlParam: "url" },
+  }[engine];
+
   const params = new URLSearchParams({
-    engine: "google_reverse_image",
-    image_url: imageUrl,
+    engine: engineConfig.engine,
+    [engineConfig.urlParam]: imageUrl,
     api_key: env.SERPAPI_KEY,
-    no_cache: "false", // SerpAPI cache de 1h é OK pra reduzir custos
+    no_cache: "false",
   });
 
   const res = await fetch(`https://serpapi.com/search?${params.toString()}`, {
@@ -71,26 +84,96 @@ export async function reverseImageSearch(
 
   if (!res.ok) {
     throw new Error(
-      `serpapi reverse_image failed ${res.status}: ${await res.text()}`,
+      `serpapi ${engine}_reverse_image failed ${res.status}: ${await res.text()}`,
     );
   }
 
   const json = (await res.json()) as SerpApiResponse;
   if (json.error) {
-    throw new Error(`serpapi error: ${json.error}`);
+    // "No results" é um caso normal pra alguns engines — não fatal.
+    if (
+      json.error.toLowerCase().includes("hasn't returned any results") ||
+      json.error.toLowerCase().includes("no results found")
+    ) {
+      return [];
+    }
+    throw new Error(`serpapi ${engine} error: ${json.error}`);
   }
 
+  // Diferentes engines retornam em diferentes campos.
   const all: SerpApiImageResult[] = [
     ...(json.image_results ?? []),
     ...(json.inline_images ?? []),
     ...(json.pages_with_matching_images ?? []),
+    // Bing/Yandex podem retornar em outros campos — incluir defensivamente
+    ...((json as Record<string, unknown>).visual_matches as
+      | SerpApiImageResult[]
+      | undefined ?? []),
+    ...((json as Record<string, unknown>).related_searches as
+      | SerpApiImageResult[]
+      | undefined ?? []),
   ];
 
-  // Dedupe por link
   const seen = new Set<string>();
   return all.filter((r) => {
     if (!r.link || seen.has(r.link)) return false;
     seen.add(r.link);
     return true;
   });
+}
+
+/**
+ * Multi-engine fan-out: chama Google + Bing + Yandex em paralelo e
+ * combina os resultados deduplicados.
+ *
+ * Útil pra "buscar reposts em qualquer lugar da internet" — cobertura
+ * máxima trocando 3 SerpAPI searches por 1 chamada.
+ */
+export async function reverseImageSearchAllEngines(
+  imageUrl: string,
+): Promise<{
+  results: SerpApiImageResult[];
+  per_engine: Record<ReverseSearchEngine, number>;
+  errors: Record<ReverseSearchEngine, string | null>;
+}> {
+  const engines: ReverseSearchEngine[] = ["google", "bing", "yandex"];
+
+  const settled = await Promise.allSettled(
+    engines.map((e) => reverseImageSearch(imageUrl, e)),
+  );
+
+  const all: SerpApiImageResult[] = [];
+  const perEngine: Record<ReverseSearchEngine, number> = {
+    google: 0,
+    bing: 0,
+    yandex: 0,
+  };
+  const errors: Record<ReverseSearchEngine, string | null> = {
+    google: null,
+    bing: null,
+    yandex: null,
+  };
+
+  settled.forEach((result, idx) => {
+    const engine = engines[idx]!;
+    if (result.status === "fulfilled") {
+      perEngine[engine] = result.value.length;
+      all.push(...result.value);
+    } else {
+      errors[engine] =
+        result.reason instanceof Error
+          ? result.reason.message
+          : String(result.reason);
+    }
+  });
+
+  // Dedupe global por link
+  const seen = new Set<string>();
+  const dedup = all.filter((r) => {
+    if (!r.link || seen.has(r.link)) return false;
+    seen.add(r.link);
+    return true;
+  });
+
+  return { results: dedup, per_engine: perEngine, errors };
 }
