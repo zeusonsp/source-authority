@@ -9,7 +9,12 @@ import {
   type AIPlagioResult,
 } from "@/lib/ai/analyze-plagio";
 import { isAIAvailable } from "@/lib/ai/anthropic";
-import { categorizeMatch, computeDHash, hammingDistance } from "@/lib/content/hash";
+import {
+  categorizeMatch,
+  computeDHash,
+  hammingDistance,
+  type MatchCategory,
+} from "@/lib/content/hash";
 import { fetchSource } from "@/lib/content/fetch-source";
 import { env as serverEnv } from "@/lib/env-server";
 import { env as clientEnv } from "@/lib/env";
@@ -176,7 +181,7 @@ export type SuspectMatchResult = {
     thumbnail_url: string | null;
     distance: number;
     similarity_pct: number;
-    category: "exact" | "very_likely" | "possible" | "different";
+    category: MatchCategory;
   } | null;
   candidates: Array<{
     content_id: string;
