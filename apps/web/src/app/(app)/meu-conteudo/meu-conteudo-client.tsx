@@ -538,7 +538,10 @@ function ContentCard({
   }
 
   return (
-    <li className="overflow-hidden rounded-md border border-border bg-background/40">
+    <li
+      id={`content-${row.id}`}
+      className="overflow-hidden rounded-md border border-border bg-background/40 scroll-mt-20"
+    >
       {row.thumbnail_url ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
