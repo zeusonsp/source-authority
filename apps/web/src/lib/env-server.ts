@@ -35,6 +35,11 @@ const serverEnvSchema = z.object({
   // Page intermediária e pula validações dos app_domains.
   INSTAGRAM_APP_ID: z.string().optional(),
   INSTAGRAM_APP_SECRET: z.string().optional(),
+  // SerpAPI (Pillar 2 V2.2 — proactive scan via Google Reverse Image).
+  // Endpoint /search com engine=google_reverse_image.
+  // Free trial: 250 searches; Developer plan $50/mo = 5k searches.
+  // Quando vazio, feature de varredura proativa fica disabled.
+  SERPAPI_KEY: z.string().optional(),
   // Shared secret pra autenticar requests do workers/brand-monitor pros
   // endpoints internos /api/internal/alerts/notify e /digest. Bearer header.
   // Gere com `openssl rand -hex 32` (32 bytes = 64 hex chars). Mesmo valor
@@ -64,6 +69,7 @@ const parsed = serverEnvSchema.safeParse({
   META_LOGIN_CONFIG_ID: process.env.META_LOGIN_CONFIG_ID,
   INSTAGRAM_APP_ID: process.env.INSTAGRAM_APP_ID,
   INSTAGRAM_APP_SECRET: process.env.INSTAGRAM_APP_SECRET,
+  SERPAPI_KEY: process.env.SERPAPI_KEY,
   INTERNAL_NOTIFICATIONS_SECRET: process.env.INTERNAL_NOTIFICATIONS_SECRET,
   STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
   STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
