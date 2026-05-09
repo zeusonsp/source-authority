@@ -11,7 +11,7 @@ import { computeDHash, hammingDistance } from "@/lib/content/hash";
 import { fetchSource } from "@/lib/content/fetch-source";
 import {
   isSerpApiConfigured,
-  reverseImageSearch,
+  reverseImageSearchAllEngines,
 } from "@/lib/integrations/serpapi";
 
 /**
@@ -108,9 +108,9 @@ export async function POST(req: Request) {
     );
   }
 
-  let serpResults;
+  let serpResponse;
   try {
-    serpResults = await reverseImageSearch(imageUrl);
+    serpResponse = await reverseImageSearchAllEngines(imageUrl);
   } catch (err) {
     console.error("[reverse-search] serpapi failed", err);
     return NextResponse.json(
@@ -119,6 +119,7 @@ export async function POST(req: Request) {
     );
   }
 
+  const serpResults = serpResponse.results;
   const resultsSeen = serpResults.length;
   let matchesFound = 0;
   const highAlertIds: string[] = [];
@@ -206,5 +207,7 @@ export async function POST(req: Request) {
   return NextResponse.json({
     results_seen: resultsSeen,
     matches_found: matchesFound,
+    per_engine: serpResponse.per_engine,
+    engine_errors: serpResponse.errors,
   });
 }
