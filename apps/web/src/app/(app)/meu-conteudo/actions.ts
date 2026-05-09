@@ -63,6 +63,27 @@ const checkSchema = z.object({
   suspect_url: z.string().url().max(2000),
 });
 
+// Limite decoded em bytes: 6MB (cobre print + foto direta sem estourar Vercel
+// body limit de ~4.5MB binary; em base64 esses 6MB viram ~8MB de string,
+// que ainda passa no soft limit de payload de Server Actions).
+const MAX_DECODED_BYTES = 6 * 1024 * 1024;
+const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+
+const checkBufferSchema = z.object({
+  // Aceita "data:" URLs E base64 puro. Strip do prefixo é feito antes do
+  // decode. Charset estendido com `-_` pra cobrir base64url também.
+  image_base64: z
+    .string()
+    .min(16, "Imagem vazia.")
+    .max(Math.ceil(MAX_DECODED_BYTES * 1.4))
+    .regex(
+      /^[A-Za-z0-9+/=_-]+$/,
+      "Conteúdo base64 inválido.",
+    ),
+  mime_type: z.enum(ALLOWED_MIME_TYPES),
+  original_name: z.string().trim().max(200).optional(),
+});
+
 const deleteSchema = z.object({
   id: z.string().uuid(),
 });
@@ -264,6 +285,147 @@ export async function checkSuspect(input: {
     // republicados quase sempre têm distance 20-40 (frames de
     // thumbnail diferentes entre IG posts mesmo do mesmo vídeo).
     // Casos uncertain devem ser revisados via AI Vision.
+    best_match:
+      top && top.distance <= 40
+        ? {
+            content_id: top.content_id,
+            title: top.title,
+            source_url: top.source_url,
+            thumbnail_url: top.thumbnail_url,
+            distance: top.distance,
+            similarity_pct: top.similarity_pct,
+            category: categorizeMatch(top.distance),
+          }
+        : null,
+    candidates: candidates.slice(0, 5).map((c) => ({
+      content_id: c.content_id,
+      title: c.title,
+      source_url: c.source_url,
+      distance: c.distance,
+      similarity_pct: c.similarity_pct,
+    })),
+  };
+  return result;
+}
+
+/**
+ * Variante de checkSuspect que aceita upload binário (base64) ao invés de URL.
+ *
+ * Caso de uso: Instagram migrou pra SPA e bloqueia og:image em HTML estático;
+ * a oEmbed API exige Meta App Review. Cliente baixa o screenshot/imagem do
+ * post suspeito e faz upload — computamos dHash e comparamos contra o
+ * Content Registry da empresa.
+ *
+ * thumbnail_url retornada é null no backend; o client substitui pela data URL
+ * local pro side-by-side da UI.
+ */
+export async function checkSuspectFromBuffer(input: {
+  image_base64: string;
+  mime_type: string;
+  original_name?: string;
+}): Promise<ActionResult<SuspectMatchResult> | SuspectMatchResult> {
+  const parsed = checkBufferSchema.safeParse(input);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    const isMime = issue?.path?.[0] === "mime_type";
+    return {
+      ok: false,
+      code: "validation",
+      message: isMime
+        ? "Formato não suportado — use JPG, PNG ou WebP."
+        : (issue?.message ?? "Imagem inválida."),
+    };
+  }
+
+  // Strip "data:image/...;base64," prefix se vier.
+  const cleanedBase64 = parsed.data.image_base64.replace(
+    /^data:[^;]+;base64,/,
+    "",
+  );
+
+  // Decode + valida tamanho real após decode.
+  let buffer: Buffer;
+  try {
+    buffer = Buffer.from(cleanedBase64, "base64");
+  } catch {
+    return {
+      ok: false,
+      code: "validation",
+      message: "Falha ao decodificar imagem.",
+    };
+  }
+
+  if (buffer.length === 0) {
+    return {
+      ok: false,
+      code: "validation",
+      message: "Imagem vazia.",
+    };
+  }
+
+  if (buffer.length > MAX_DECODED_BYTES) {
+    return {
+      ok: false,
+      code: "validation",
+      message: "Arquivo muito grande (max 6MB).",
+    };
+  }
+
+  const ctx = await authorizeAdmin();
+  if (!ctx) return { ok: false, code: "forbidden", message: "Sem permissão." };
+
+  let suspectHash: string;
+  try {
+    suspectHash = await computeDHash(buffer);
+  } catch (err) {
+    console.error("[content/check-buffer] hash failed", err);
+    return {
+      ok: false,
+      code: "unknown",
+      message: "Falha ao processar imagem.",
+    };
+  }
+
+  const supabase = createClient();
+  const { data: contents } = await supabase
+    .from("contents")
+    .select("id, title, source_url, thumbnail_url, thumbnail_dhash")
+    .eq("company_id", ctx.company_id)
+    .eq("status", "ready")
+    .not("thumbnail_dhash", "is", null);
+
+  const candidates = (contents ?? [])
+    .map((c) => {
+      if (!c.thumbnail_dhash) return null;
+      const distance = hammingDistance(c.thumbnail_dhash, suspectHash);
+      return {
+        content_id: c.id,
+        title: c.title,
+        source_url: c.source_url,
+        thumbnail_url: c.thumbnail_url,
+        distance,
+        similarity_pct: Math.round((1 - distance / 64) * 100),
+      };
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null)
+    .sort((a, b) => a.distance - b.distance);
+
+  const top = candidates[0];
+  // suspect.url precisa ser string; usamos o original_name (ou marker
+  // sintético) pra dar contexto na UI sem mentir um link real.
+  const syntheticUrl = parsed.data.original_name
+    ? `upload://${parsed.data.original_name}`
+    : "upload://image";
+
+  const result: SuspectMatchResult = {
+    ok: true,
+    suspect: {
+      url: syntheticUrl,
+      platform: "upload",
+      // Backend retorna null — client substitui por data URL local pra UI.
+      thumbnail_url: null,
+      title: parsed.data.original_name ?? null,
+    },
     best_match:
       top && top.distance <= 40
         ? {
