@@ -3,6 +3,7 @@
 import {
   AlertCircle,
   CheckCircle2,
+  Globe,
   Loader2,
   Plus,
   Search,
@@ -21,6 +22,7 @@ import {
   checkSuspect,
   deleteContent,
   registerContent,
+  scanForRepostsNow,
   type AIAnalyzeServerResult,
   type SuspectMatchResult,
 } from "./actions";
@@ -502,12 +504,36 @@ function ContentCard({
   canEdit: boolean;
 }) {
   const [pending, startDelete] = useTransition();
+  const [scanning, startScan] = useTransition();
+  const [scanResult, setScanResult] = useState<
+    | null
+    | { ok: true; results: number; matches: number }
+    | { ok: false; message: string }
+  >(null);
 
   function onDelete() {
     if (pending) return;
     if (!confirm(`Excluir este conteúdo do registro?`)) return;
     startDelete(async () => {
       await deleteContent({ id: row.id });
+    });
+  }
+
+  function onScan() {
+    if (scanning) return;
+    setScanResult(null);
+    startScan(async () => {
+      const r = await scanForRepostsNow({ content_id: row.id });
+      if (r.ok) {
+        setScanResult({
+          ok: true,
+          results: r.results_seen,
+          matches: r.matches_found,
+        });
+      } else {
+        setScanResult({ ok: false, message: r.message });
+      }
+      setTimeout(() => setScanResult(null), 12000);
     });
   }
 
@@ -560,6 +586,47 @@ function ContentCard({
         >
           {row.source_url}
         </a>
+
+        {canEdit && row.status === "ready" ? (
+          <div className="space-y-1.5 pt-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={onScan}
+              disabled={scanning}
+              className="w-full text-[11px]"
+            >
+              {scanning ? (
+                <Loader2 className="size-3 animate-spin" />
+              ) : (
+                <Globe className="size-3" />
+              )}
+              Buscar reposts no Google
+            </Button>
+
+            {scanResult?.ok ? (
+              <p
+                className={cn(
+                  "rounded-md px-2 py-1 text-[10px]",
+                  scanResult.matches > 0
+                    ? "bg-rose-400/10 text-rose-400"
+                    : "bg-emerald-400/10 text-emerald-400",
+                )}
+              >
+                {scanResult.matches > 0 ? "🚨 " : "✓ "}
+                {scanResult.results} pági­na(s) varrida(s) ·{" "}
+                <strong>{scanResult.matches} repost(s) detectado(s)</strong>
+                {scanResult.matches > 0 ? " — abre /alertas" : ""}
+              </p>
+            ) : null}
+            {scanResult && !scanResult.ok ? (
+              <p className="rounded-md bg-rose-400/10 px-2 py-1 text-[10px] text-rose-400">
+                {scanResult.message}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </li>
   );

@@ -11,6 +11,8 @@ import {
 import { isAIAvailable } from "@/lib/ai/anthropic";
 import { categorizeMatch, computeDHash, hammingDistance } from "@/lib/content/hash";
 import { fetchSource } from "@/lib/content/fetch-source";
+import { env as serverEnv } from "@/lib/env-server";
+import { env as clientEnv } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -456,6 +458,75 @@ export async function analyzeWithAI(input: {
     cost_usd: aiResult.costMicroUsd / 100_000,
     model: aiResult.model,
   };
+}
+
+/**
+ * Pillar 2 V2.2 — proactive scan via Google Reverse Image Search.
+ * Server action que chama o endpoint /api/internal/content/reverse-search
+ * pra um conteúdo específico. Retorna count de matches + cria alerts.
+ */
+export async function scanForRepostsNow(input: {
+  content_id: string;
+}): Promise<
+  | { ok: true; results_seen: number; matches_found: number }
+  | { ok: false; message: string }
+> {
+  const ctx = await authorizeAdmin();
+  if (!ctx) return { ok: false, message: "Sem permissão." };
+
+  const parsedId = z.string().uuid().safeParse(input.content_id);
+  if (!parsedId.success) {
+    return { ok: false, message: "ID inválido." };
+  }
+
+  // Verifica que o content pertence à empresa do user (RLS extra-camada).
+  const supabase = createClient();
+  const { data: own } = await supabase
+    .from("contents")
+    .select("id")
+    .eq("id", parsedId.data)
+    .eq("company_id", ctx.company_id)
+    .maybeSingle();
+  if (!own) {
+    return { ok: false, message: "Conteúdo não encontrado." };
+  }
+
+  try {
+    const res = await fetch(
+      `${clientEnv.NEXT_PUBLIC_APP_URL}/api/internal/content/reverse-search`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${serverEnv.INTERNAL_NOTIFICATIONS_SECRET}`,
+        },
+        body: JSON.stringify({ content_id: parsedId.data }),
+      },
+    );
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      return {
+        ok: false,
+        message: `Falha ao buscar (${res.status}): ${text.slice(0, 240)}`,
+      };
+    }
+    const body = (await res.json()) as {
+      results_seen: number;
+      matches_found: number;
+    };
+    revalidatePath("/alertas");
+    revalidatePath("/meu-conteudo");
+    return {
+      ok: true,
+      results_seen: body.results_seen,
+      matches_found: body.matches_found,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      message: err instanceof Error ? err.message : "Erro inesperado",
+    };
+  }
 }
 
 function messageForReason(reason: string, detail?: string): string {
