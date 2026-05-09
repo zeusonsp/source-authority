@@ -4,13 +4,16 @@ import {
   AlertCircle,
   CheckCircle2,
   Globe,
+  Image as ImageIcon,
+  Link2,
   Loader2,
   Plus,
   Search,
   Sparkles,
   Trash2,
+  Upload,
 } from "lucide-react";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,12 +23,35 @@ import {
   analyzeWithAI,
   checkAIAvailable,
   checkSuspect,
+  checkSuspectFromBuffer,
   deleteContent,
   registerContent,
   scanForRepostsNow,
   type AIAnalyzeServerResult,
   type SuspectMatchResult,
 } from "./actions";
+
+const ACCEPTED_MIMES = ["image/jpeg", "image/png", "image/webp"];
+const MAX_UPLOAD_BYTES = 6 * 1024 * 1024;
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== "string") {
+        reject(new Error("FileReader não retornou string."));
+        return;
+      }
+      // result é "data:image/png;base64,iVBORw0..."; o backend lida com o
+      // strip do prefixo, mas mandamos só a parte base64 pra economizar bytes.
+      const idx = result.indexOf(",");
+      resolve(idx >= 0 ? result.slice(idx + 1) : result);
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("Erro de leitura."));
+    reader.readAsDataURL(file);
+  });
+}
 
 export type ContentRow = {
   id: string;
@@ -94,24 +120,26 @@ export function MeuConteudoClient({ rows, canEdit }: Props) {
 
 // ─── Verificar suspeita ────────────────────────────────────────────────────
 
+type CheckMode = "url" | "upload";
+
 function CheckSuspectCard() {
-  const [pending, startCheck] = useTransition();
-  const [suspectUrl, setSuspectUrl] = useState("");
+  const [mode, setMode] = useState<CheckMode>("url");
+  // Result state lives no card pra ser compartilhado entre as duas abas
+  // sem ficar duplicado/orfão; quando troca de aba, limpa o estado.
   const [result, setResult] = useState<SuspectMatchResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // suspectImagePreview substitui o thumbnail_url do server (que vem null
+  // no flow upload) pra renderizar comparativo side-by-side.
+  const [suspectImagePreview, setSuspectImagePreview] = useState<string | null>(
+    null,
+  );
 
-  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  function switchMode(next: CheckMode) {
+    if (next === mode) return;
+    setMode(next);
     setResult(null);
     setError(null);
-    startCheck(async () => {
-      const r = await checkSuspect({ suspect_url: suspectUrl });
-      if ("ok" in r && r.ok === false) {
-        setError(r.message);
-        return;
-      }
-      setResult(r as SuspectMatchResult);
-    });
+    setSuspectImagePreview(null);
   }
 
   return (
@@ -120,29 +148,73 @@ function CheckSuspectCard() {
         Verificar repost suspeito
       </h2>
       <p className="mt-1 text-xs text-muted-foreground">
-        Cola URL de qualquer post (Instagram, TikTok, YouTube) → comparamos
-        com seus originais cadastrados.
+        Compara um post suspeito contra seus originais cadastrados via
+        fingerprint perceptual (dHash).
       </p>
 
-      <form onSubmit={onSubmit} className="mt-3 flex flex-wrap gap-2" noValidate>
-        <Input
-          type="url"
-          required
-          placeholder="https://instagram.com/p/abc... ou tiktok.com/@.../video/..."
-          value={suspectUrl}
-          onChange={(e) => setSuspectUrl(e.target.value)}
-          disabled={pending}
-          className="min-w-[260px] flex-1 font-mono text-xs"
-        />
-        <Button type="submit" size="sm" disabled={pending || !suspectUrl}>
-          {pending ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <Search className="size-4" />
+      <div
+        role="tablist"
+        aria-label="Modo de verificação"
+        className="mt-3 inline-flex rounded-md border border-border bg-background/40 p-0.5"
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === "url"}
+          onClick={() => switchMode("url")}
+          className={cn(
+            "flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition-colors",
+            mode === "url"
+              ? "bg-card text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
           )}
-          Verificar
-        </Button>
-      </form>
+        >
+          <Link2 className="size-3.5" />
+          URL do post
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === "upload"}
+          onClick={() => switchMode("upload")}
+          className={cn(
+            "flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition-colors",
+            mode === "upload"
+              ? "bg-card text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          <ImageIcon className="size-3.5" />
+          Upload de imagem
+        </button>
+      </div>
+
+      {mode === "url" ? (
+        <CheckByUrlForm
+          onResult={(r) => {
+            setResult(r);
+            setSuspectImagePreview(null);
+          }}
+          onError={setError}
+          onReset={() => {
+            setResult(null);
+            setError(null);
+          }}
+        />
+      ) : (
+        <CheckByUploadForm
+          onResult={(r, preview) => {
+            setResult(r);
+            setSuspectImagePreview(preview);
+          }}
+          onError={setError}
+          onReset={() => {
+            setResult(null);
+            setError(null);
+            setSuspectImagePreview(null);
+          }}
+        />
+      )}
 
       {error ? (
         <Alert variant="destructive" className="mt-3">
@@ -151,8 +223,220 @@ function CheckSuspectCard() {
         </Alert>
       ) : null}
 
-      {result ? <SuspectResultCard result={result} /> : null}
+      {result ? (
+        <SuspectResultCard
+          result={result}
+          suspectPreviewOverride={suspectImagePreview}
+        />
+      ) : null}
     </section>
+  );
+}
+
+function CheckByUrlForm({
+  onResult,
+  onError,
+  onReset,
+}: {
+  onResult: (r: SuspectMatchResult) => void;
+  onError: (msg: string) => void;
+  onReset: () => void;
+}) {
+  const [pending, startCheck] = useTransition();
+  const [suspectUrl, setSuspectUrl] = useState("");
+
+  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    onReset();
+    startCheck(async () => {
+      const r = await checkSuspect({ suspect_url: suspectUrl });
+      if ("ok" in r && r.ok === false) {
+        onError(r.message);
+        return;
+      }
+      onResult(r as SuspectMatchResult);
+    });
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="mt-3 flex flex-wrap gap-2" noValidate>
+      <Input
+        type="url"
+        required
+        placeholder="https://instagram.com/p/abc... ou tiktok.com/@.../video/..."
+        value={suspectUrl}
+        onChange={(e) => setSuspectUrl(e.target.value)}
+        disabled={pending}
+        className="min-w-[260px] flex-1 font-mono text-xs"
+      />
+      <Button type="submit" size="sm" disabled={pending || !suspectUrl}>
+        {pending ? (
+          <Loader2 className="size-4 animate-spin" />
+        ) : (
+          <Search className="size-4" />
+        )}
+        Verificar
+      </Button>
+    </form>
+  );
+}
+
+function CheckByUploadForm({
+  onResult,
+  onError,
+  onReset,
+}: {
+  onResult: (r: SuspectMatchResult, previewDataUrl: string) => void;
+  onError: (msg: string) => void;
+  onReset: () => void;
+}) {
+  const [pending, startCheck] = useTransition();
+  const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function clearFile() {
+    setFile(null);
+    setPreviewUrl(null);
+    if (inputRef.current) inputRef.current.value = "";
+  }
+
+  function acceptFile(picked: File | null | undefined) {
+    onReset();
+    if (!picked) {
+      clearFile();
+      return;
+    }
+    if (!ACCEPTED_MIMES.includes(picked.type)) {
+      onError("Formato não suportado — use JPG, PNG ou WebP.");
+      clearFile();
+      return;
+    }
+    if (picked.size > MAX_UPLOAD_BYTES) {
+      onError("Arquivo muito grande (max 6MB).");
+      clearFile();
+      return;
+    }
+    setFile(picked);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const r = reader.result;
+      if (typeof r === "string") setPreviewUrl(r);
+    };
+    reader.readAsDataURL(picked);
+  }
+
+  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!file) return;
+    onReset();
+    startCheck(async () => {
+      let base64: string;
+      try {
+        base64 = await fileToBase64(file);
+      } catch {
+        onError("Falha ao processar imagem.");
+        return;
+      }
+      const r = await checkSuspectFromBuffer({
+        image_base64: base64,
+        mime_type: file.type as (typeof ACCEPTED_MIMES)[number],
+        original_name: file.name,
+      });
+      if ("ok" in r && r.ok === false) {
+        onError(r.message);
+        return;
+      }
+      // previewUrl é a data URL local (formato "data:image/...;base64,...")
+      // — passamos pro card pra renderizar o suspeito side-by-side.
+      onResult(r as SuspectMatchResult, previewUrl ?? "");
+    });
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="mt-3 space-y-3" noValidate>
+      <p className="rounded-md border border-accent/30 bg-accent/5 p-2.5 text-[11px] leading-relaxed text-muted-foreground">
+        Quando o post não está acessível publicamente (Instagram bloqueia
+        muitos), faça upload de um screenshot ou da imagem direta.
+      </p>
+
+      <label
+        htmlFor="suspect-upload"
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          const dropped = e.dataTransfer.files?.[0];
+          acceptFile(dropped);
+        }}
+        className={cn(
+          "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed p-6 text-center transition-colors",
+          dragOver
+            ? "border-accent bg-accent/10"
+            : "border-border bg-background/40 hover:border-accent/50 hover:bg-accent/5",
+        )}
+      >
+        {previewUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={previewUrl}
+            alt="Pré-visualização"
+            className="max-h-40 rounded border border-border object-contain"
+          />
+        ) : (
+          <Upload className="size-6 text-muted-foreground" />
+        )}
+        <span className="text-xs text-muted-foreground">
+          {file ? (
+            <>
+              <strong className="text-foreground">{file.name}</strong> ·{" "}
+              {(file.size / 1024).toFixed(0)} KB
+            </>
+          ) : (
+            <>Arraste a imagem aqui ou clique pra escolher (JPG, PNG, WebP — max 6MB)</>
+          )}
+        </span>
+        <input
+          ref={inputRef}
+          id="suspect-upload"
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="hidden"
+          onChange={(e) => acceptFile(e.target.files?.[0])}
+          disabled={pending}
+        />
+      </label>
+
+      <div className="flex justify-end gap-2">
+        {file ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              clearFile();
+              onReset();
+            }}
+            disabled={pending}
+          >
+            Remover
+          </Button>
+        ) : null}
+        <Button type="submit" size="sm" disabled={pending || !file}>
+          {pending ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Search className="size-4" />
+          )}
+          Verificar
+        </Button>
+      </div>
+    </form>
   );
 }
 
@@ -267,8 +551,21 @@ function AIAnalysisPanel({
   );
 }
 
-function SuspectResultCard({ result }: { result: SuspectMatchResult }) {
+function SuspectResultCard({
+  result,
+  suspectPreviewOverride,
+}: {
+  result: SuspectMatchResult;
+  suspectPreviewOverride?: string | null;
+}) {
   const m = result.best_match;
+  // No flow upload o backend devolve thumbnail_url=null; o client-side
+  // override (data URL local) é prioridade.
+  const suspectImageSrc =
+    suspectPreviewOverride && suspectPreviewOverride.length > 0
+      ? suspectPreviewOverride
+      : result.suspect.thumbnail_url;
+  const isUpload = result.suspect.platform === "upload";
   return (
     <div className="mt-4 space-y-3">
       {m ? (
@@ -297,19 +594,25 @@ function SuspectResultCard({ result }: { result: SuspectMatchResult }) {
               <p className="font-semibold uppercase tracking-wide text-muted-foreground">
                 Suspeito
               </p>
-              {result.suspect.thumbnail_url ? (
+              {suspectImageSrc ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={result.suspect.thumbnail_url}
+                  src={suspectImageSrc}
                   alt="Suspeito"
                   className="aspect-square w-full rounded border border-border object-cover"
                   loading="lazy"
                 />
               ) : null}
-              <p className="break-all text-[11px] text-muted-foreground">
-                {result.suspect.url}
-              </p>
-              {result.suspect.title ? (
+              {isUpload ? (
+                <p className="text-[11px] text-muted-foreground">
+                  {result.suspect.title ?? "Imagem enviada"}
+                </p>
+              ) : (
+                <p className="break-all text-[11px] text-muted-foreground">
+                  {result.suspect.url}
+                </p>
+              )}
+              {!isUpload && result.suspect.title ? (
                 <p className="line-clamp-2 text-[11px]">
                   {result.suspect.title}
                 </p>
@@ -336,26 +639,37 @@ function SuspectResultCard({ result }: { result: SuspectMatchResult }) {
               ) : null}
             </div>
           </div>
-          <AIAnalysisPanel
-            contentId={m.content_id}
-            suspectUrl={result.suspect.url}
-          />
+          {/* AI panel exige URL pública pra refetch da imagem suspeita —
+              flow upload não tem URL real, então só dHash. */}
+          {!isUpload ? (
+            <AIAnalysisPanel
+              contentId={m.content_id}
+              suspectUrl={result.suspect.url}
+            />
+          ) : (
+            <p className="mt-3 text-[10px] text-muted-foreground">
+              Análise IA Vision indisponível em uploads — exige URL pública do post suspeito.
+            </p>
+          )}
         </div>
       ) : (
         <div className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
           Sem matches encontrados via dHash. Pode ser conteúdo diferente
           OU plágio com edits agressivos (cores, recorte, regravação) que
-          dHash não detecta. Use IA pra confirmar:
-          {result.candidates[0] ? (
-            <AIAnalysisPanel
-              contentId={result.candidates[0].content_id}
-              suspectUrl={result.suspect.url}
-            />
-          ) : (
+          dHash não detecta.
+          {!isUpload && result.candidates[0] ? (
+            <>
+              {" "}Use IA pra confirmar:
+              <AIAnalysisPanel
+                contentId={result.candidates[0].content_id}
+                suspectUrl={result.suspect.url}
+              />
+            </>
+          ) : !isUpload ? (
             <p className="mt-2 text-[11px]">
               Cadastre originais primeiro pra IA poder comparar.
             </p>
-          )}
+          ) : null}
         </div>
       )}
 
