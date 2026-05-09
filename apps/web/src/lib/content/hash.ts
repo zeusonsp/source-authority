@@ -82,12 +82,24 @@ export function similarityScore(hashA: string, hashB: string): number {
 
 /**
  * Categoriza distância em label humano + threshold de match.
+ *
+ * "uncertain" é fundamental pra vídeos: Instagram escolhe frames
+ * diferentes pra thumbnail de cada post, então mesmo o MESMO vídeo
+ * republicado por outra conta tem distance 20-40 nos thumbnails.
+ * Esses casos NÃO podem ser descartados como "different" — precisam
+ * de análise semântica via AI Vision (Innovation #1).
  */
-export function categorizeMatch(
-  distance: number,
-): "exact" | "very_likely" | "possible" | "different" {
+export type MatchCategory =
+  | "exact"
+  | "very_likely"
+  | "possible"
+  | "uncertain"
+  | "different";
+
+export function categorizeMatch(distance: number): MatchCategory {
   if (distance <= 3) return "exact";
   if (distance <= 10) return "very_likely";
   if (distance <= 20) return "possible";
+  if (distance <= 40) return "uncertain";
   return "different";
 }

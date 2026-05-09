@@ -255,8 +255,12 @@ export async function checkSuspect(input: {
       thumbnail_url: source.metadata.thumbnail_url,
       title: source.metadata.title,
     },
+    // Threshold subido pra 40 pra incluir "uncertain" — vídeos
+    // republicados quase sempre têm distance 20-40 (frames de
+    // thumbnail diferentes entre IG posts mesmo do mesmo vídeo).
+    // Casos uncertain devem ser revisados via AI Vision.
     best_match:
-      top && top.distance <= 25
+      top && top.distance <= 40
         ? {
             content_id: top.content_id,
             title: top.title,
