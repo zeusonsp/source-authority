@@ -45,8 +45,8 @@ type Props = {
 };
 
 const CATEGORY_LABEL: Record<
-  "exact" | "very_likely" | "possible" | "different",
-  { label: string; color: string }
+  "exact" | "very_likely" | "possible" | "uncertain" | "different",
+  { label: string; color: string; hint?: string }
 > = {
   exact: {
     label: "Repost confirmado",
@@ -60,6 +60,11 @@ const CATEGORY_LABEL: Record<
   possible: {
     label: "Possível repost (verificar manual)",
     color: "text-yellow-400 border-yellow-400/40 bg-yellow-400/10",
+  },
+  uncertain: {
+    label: "Pixel hash inconclusivo — analisar com IA",
+    color: "text-amber-400 border-amber-400/40 bg-amber-400/10",
+    hint: "Vídeos republicados frequentemente têm thumbnails diferentes mesmo sendo o mesmo vídeo. Use 'Analisar com IA' abaixo pra verificação semântica via Claude Vision.",
   },
   different: {
     label: "Provavelmente conteúdo diferente",
@@ -282,6 +287,11 @@ function SuspectResultCard({ result }: { result: SuspectMatchResult }) {
               {m.distance}/64
             </span>
           </div>
+          {CATEGORY_LABEL[m.category].hint ? (
+            <p className="mb-3 text-[11px] italic opacity-90">
+              {CATEGORY_LABEL[m.category].hint}
+            </p>
+          ) : null}
           <div className="grid grid-cols-2 gap-3 text-xs">
             <div className="space-y-2">
               <p className="font-semibold uppercase tracking-wide text-muted-foreground">
