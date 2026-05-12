@@ -1,0 +1,120 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Capitaliza Pro — light mode premium (zeushigh-inspired) */
+    /* Off-white background, deep black text, signature gold accent */
+    --background: 0 0% 98%;             /* #FAFAFA */
+    --foreground: 0 0% 10%;             /* #1A1A1A */
+
+    --card: 0 0% 100%;                   /* #FFFFFF */
+    --card-foreground: 0 0% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 10%;
+
+    --primary: 45 65% 48%;               /* Gold #C9A03A (slightly deeper for contrast on white) */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 10%;
+
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 38%;        /* #616161 */
+
+    --accent: 45 65% 48%;
+    --accent-foreground: 0 0% 100%;
+    --accent-light: 45 80% 92%;          /* Champagne tint #FAEFD2 */
+
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 90%;                  /* #E5E5E5 */
+    --input: 0 0% 90%;
+    --ring: 45 65% 48%;
+
+    --radius: 0.75rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@layer utilities {
+  /* Subtle gold pulse for badges */
+  @keyframes gold-pulse {
+    0%, 100% {
+      box-shadow: 0 0 0 0 hsl(var(--accent) / 0.4);
+    }
+    50% {
+      box-shadow: 0 0 0 8px hsl(var(--accent) / 0);
+    }
+  }
+  .animate-gold-pulse {
+    animation: gold-pulse 2.4s ease-in-out infinite;
+  }
+
+  /* Horizontal ticker slide */
+  @keyframes ticker {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+  .animate-ticker {
+    animation: ticker 40s linear infinite;
+  }
+
+  /* Slot machine number tumble */
+  @keyframes tumble {
+    0%   { transform: translateY(0); }
+    100% { transform: translateY(-90%); }
+  }
+  .animate-tumble {
+    animation: tumble 0.06s linear infinite;
+  }
+
+  /* Fade-in on reveal */
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .animate-fade-up {
+    animation: fade-up 0.6s ease-out both;
+  }
+
+  /* Premium grain texture overlay using radial gradient noise */
+  .bg-grain {
+    background-image:
+      radial-gradient(at 27% 37%, hsl(var(--accent-light) / 0.4) 0px, transparent 50%),
+      radial-gradient(at 97% 21%, hsl(var(--accent) / 0.08) 0px, transparent 50%),
+      radial-gradient(at 52% 99%, hsl(var(--accent-light) / 0.3) 0px, transparent 50%);
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Subtle reveal for sections — used by ScrollReveal */
+  .reveal-hidden {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.7s ease-out, transform 0.7s ease-out;
+  }
+  .reveal-visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
