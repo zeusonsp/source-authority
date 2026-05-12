@@ -27,7 +27,7 @@ export function FloatingWhatsApp() {
       rel="noopener noreferrer"
       aria-label="Falar no WhatsApp"
       className={cn(
-        "fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full bg-[#25D366] px-5 py-3.5 font-semibold text-white shadow-[0_8px_32px_-8px_rgba(37,211,102,0.6)] transition-all duration-500 hover:bg-[#1ebd5a] hover:shadow-[0_12px_40px_-8px_rgba(37,211,102,0.8)]",
+        "fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-full bg-[#25D366] px-5 py-3.5 font-extrabold uppercase tracking-wide text-white shadow-[0_12px_32px_-8px_rgba(37,211,102,0.7)] transition-all duration-500 hover:bg-[#1ebd5a] hover:shadow-[0_16px_40px_-8px_rgba(37,211,102,0.9)] sm:bottom-6 sm:right-6",
         visible
           ? "opacity-100 translate-y-0"
           : "opacity-0 translate-y-4 pointer-events-none",

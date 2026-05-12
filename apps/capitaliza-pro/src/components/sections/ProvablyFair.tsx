@@ -1,228 +1,169 @@
 "use client";
 
-import { CheckCircle2, ExternalLink, Loader2, Play, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { buttonClasses } from "@/components/ui/button";
+import { CheckCircle2, ExternalLink, Play, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type DemoState = "idle" | "rolling" | "settled";
+/**
+ * Demo interativo provably fair. Quando clica, 100 números embaralham
+ * por ~3s (interval ~50ms), param em 1, mostra hash SHA-256 mock +
+ * link pra polygonscan mock. Em produção, esse hash é registrado em
+ * blockchain ANTES do sorteio começar.
+ */
 
-// Pseudo SHA-256 deterministic-looking string. Em produção, viria
-// do hash real publicado on-chain — aqui é só visual.
-function fakeHash(seed: number): string {
-  const chars = "0123456789abcdef";
-  let out = "0x";
-  let x = seed;
-  for (let i = 0; i < 64; i++) {
-    x = (x * 9301 + 49297) % 233280;
-    out += chars[Math.floor((x / 233280) * 16)];
-  }
-  return out;
+type Status = "idle" | "spinning" | "done";
+
+// Hash mock fixo. Em produção, é o hash real do bloco.
+const MOCK_HASH = "0x8f3a9c2b7e1d4f6a5c8b9e2d1a7f3c6b8e9d2a4c5f1b7e3d9a6c2f4b8e1d7a3c";
+const MOCK_POLYGONSCAN =
+  "https://polygonscan.com/tx/0x8f3a9c2b7e1d4f6a5c8b9e2d1a7f3c6b8e9d2a4c5f1b7e3d9a6c2f4b8e1d7a3c";
+
+function pad(n: number) {
+  return n.toString().padStart(2, "0");
 }
 
 export function ProvablyFair() {
-  const [state, setState] = useState<DemoState>("idle");
-  const [winningNumber, setWinningNumber] = useState<number | null>(null);
-  const [hash, setHash] = useState<string>("");
-  const [rollingNumber, setRollingNumber] = useState<number>(0);
+  const [status, setStatus] = useState<Status>("idle");
+  const [current, setCurrent] = useState(48);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Clean up timers on unmount pra evitar setState após unmount
+  // Cleanup ao desmontar — evita leak do interval/timeout
   useEffect(() => {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, []);
 
-  function runDemo() {
-    if (state === "rolling") return;
+  function start() {
+    if (status === "spinning") return;
+    setStatus("spinning");
 
-    setState("rolling");
-    setWinningNumber(null);
-    setHash("");
-
-    if (intervalRef.current) clearInterval(intervalRef.current);
-
-    // "Tumble" effect — number flips rapidly for visual flair
     intervalRef.current = setInterval(() => {
-      setRollingNumber(Math.floor(Math.random() * 100));
+      setCurrent(Math.floor(Math.random() * 100) + 1);
     }, 50);
 
-    // Settle after ~2.6s
-    setTimeout(() => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      const final = Math.floor(Math.random() * 100);
-      setRollingNumber(final);
-      setWinningNumber(final);
-      setHash(fakeHash(Date.now()));
-      setState("settled");
-    }, 2600);
+    timeoutRef.current = setTimeout(() => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      // Para em 1 — número simbólico do "número da sorte"
+      setCurrent(1);
+      setStatus("done");
+    }, 3000);
   }
 
   function reset() {
-    setState("idle");
-    setWinningNumber(null);
-    setHash("");
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    intervalRef.current = null;
+    timeoutRef.current = null;
+    setCurrent(48);
+    setStatus("idle");
   }
 
   return (
     <section
       id="provably-fair"
-      className="relative border-t border-foreground/[0.04] py-24 md:py-32"
+      className="relative overflow-hidden bg-[#054C2D] py-14 text-white sm:py-20"
     >
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 -z-10 bg-grain opacity-40"
+        className="pointer-events-none absolute inset-0 opacity-[0.06]"
+        style={{
+          backgroundImage:
+            "repeating-linear-gradient(-45deg, #FFD700 0 2px, transparent 2px 16px)",
+        }}
       />
-
-      <div className="container mx-auto px-6">
-        <div className="mx-auto max-w-2xl text-center">
-          <span className="inline-flex items-center gap-2 rounded-full border border-accent/20 bg-accent-light/30 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-foreground/70">
-            Demonstração interativa
-          </span>
-          <h2 className="mt-5 text-balance text-3xl font-extrabold tracking-tight md:text-5xl">
-            Veja o sorteio <span className="text-accent">provably fair</span> em ação.
+      <div className="container relative mx-auto px-4 sm:px-6">
+        <div className="mx-auto max-w-3xl text-center">
+          <p className="mb-3 text-sm font-extrabold uppercase tracking-wider text-[#FFD700]">
+            Provably Fair
+          </p>
+          <h2 className="text-balance text-3xl font-extrabold uppercase sm:text-5xl">
+            O sorteio é <span className="text-[#FFD700]">AUDITÁVEL</span>
+            <br />
+            veja como funciona
           </h2>
-          <p className="mt-4 text-balance text-muted-foreground md:text-lg">
-            Em produção, o hash do resultado é publicado on-chain ANTES do
-            sorteio começar. Impossível manipular. Verificável por qualquer um.
+          <p className="mt-4 text-base text-white/85 sm:text-lg">
+            Clique no botão e veja a aleatoriedade ao vivo.
           </p>
         </div>
 
-        <div className="mx-auto mt-14 max-w-3xl">
-          <div className="relative overflow-hidden rounded-3xl border border-foreground/[0.08] bg-card shadow-[0_8px_32px_-12px_rgb(0_0_0_/_0.12)]">
-            {/* Top label */}
-            <div className="flex items-center justify-between border-b border-foreground/[0.06] px-6 py-4">
-              <div className="flex items-center gap-2">
-                <span
-                  className={cn(
-                    "relative flex size-2 rounded-full",
-                    state === "rolling"
-                      ? "bg-accent animate-pulse"
-                      : state === "settled"
-                      ? "bg-emerald-500"
-                      : "bg-muted-foreground/40",
-                  )}
-                />
-                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  {state === "idle" && "Aguardando início"}
-                  {state === "rolling" && "Sorteando..."}
-                  {state === "settled" && "Sorteio concluído"}
-                </span>
+        {/* Demo card */}
+        <div className="mx-auto mt-10 max-w-2xl">
+          <div className="rounded-3xl border-2 border-[#FFD700] bg-white/[0.06] p-6 backdrop-blur-sm sm:p-10">
+            {/* Display do número */}
+            <div className="mb-7 flex flex-col items-center">
+              <div className="mb-2 text-xs font-extrabold uppercase tracking-wider text-[#FFD700]">
+                {status === "done"
+                  ? "Número sorteado"
+                  : status === "spinning"
+                    ? "Sorteando..."
+                    : "Aguardando sorteio"}
               </div>
-              <span className="font-mono text-xs text-muted-foreground">
-                Sorteio #128 · simulação
-              </span>
-            </div>
-
-            {/* Number display */}
-            <div className="flex flex-col items-center px-6 py-16">
-              <p className="mb-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Número sorteado
-              </p>
               <div
                 className={cn(
-                  "relative font-extrabold tabular-nums tracking-tight transition-all duration-500",
-                  state === "settled" ? "text-accent" : "text-foreground",
-                  "text-[8rem] leading-none md:text-[12rem]",
+                  "flex h-32 w-32 items-center justify-center rounded-3xl border-4 border-[#FFD700] bg-[#054C2D] text-6xl font-extrabold tabular-nums text-[#FFD700] shadow-2xl sm:h-44 sm:w-44 sm:text-7xl",
+                  status === "spinning" && "animate-pulse",
                 )}
                 aria-live="polite"
-                aria-atomic="true"
               >
-                {state === "idle"
-                  ? "—"
-                  : String(
-                      state === "settled" ? winningNumber ?? 0 : rollingNumber,
-                    ).padStart(2, "0")}
+                {pad(current)}
               </div>
+            </div>
 
-              {/* Hash reveal */}
-              <div
-                className={cn(
-                  "mt-12 w-full max-w-xl transition-all duration-500",
-                  state === "settled"
-                    ? "opacity-100 translate-y-0"
-                    : "opacity-0 translate-y-2 pointer-events-none",
-                )}
+            {/* Botão */}
+            {status !== "done" ? (
+              <button
+                type="button"
+                onClick={start}
+                disabled={status === "spinning"}
+                className="mx-auto flex h-14 w-full max-w-md items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#7C3AED] via-[#5C2D9C] to-[#7C3AED] px-6 text-base font-extrabold uppercase tracking-wide text-white shadow-[0_12px_32px_-8px_rgba(92,45,156,0.7)] transition-all animate-shine hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70 sm:h-16 sm:text-lg"
               >
-                <div className="rounded-xl border border-foreground/[0.06] bg-secondary p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex min-w-0 flex-1 items-center gap-2">
-                      <CheckCircle2 className="size-4 shrink-0 text-emerald-500" />
-                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        Hash SHA-256
-                      </span>
-                    </div>
-                    <a
-                      href="https://polygonscan.com"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-accent transition-colors hover:text-foreground"
-                    >
-                      Verificar on-chain
-                      <ExternalLink className="size-3" />
-                    </a>
+                <Play className="size-5 fill-current" />
+                {status === "spinning" ? "Sorteando..." : "Simular sorteio agora"}
+              </button>
+            ) : (
+              <div className="space-y-4">
+                <div className="rounded-2xl border-2 border-[#FFD700]/60 bg-black/30 p-4 sm:p-5">
+                  <div className="mb-2 flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-[#FFD700]">
+                    <CheckCircle2 className="size-4" />
+                    Hash SHA-256 do sorteio
                   </div>
-                  <p className="mt-3 break-all font-mono text-[11px] leading-relaxed text-foreground/70">
-                    {hash}
-                  </p>
+                  <code className="block break-all rounded-md bg-black/40 px-3 py-2 font-mono text-[11px] text-[#FFD700] sm:text-sm">
+                    {MOCK_HASH}
+                  </code>
+                  <a
+                    href={MOCK_POLYGONSCAN}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-3 inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#FFD700] underline-offset-4 hover:underline sm:text-sm"
+                  >
+                    Ver na Polygonscan
+                    <ExternalLink className="size-3.5" />
+                  </a>
                 </div>
-              </div>
 
-              {/* Controls */}
-              <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
                 <button
                   type="button"
-                  onClick={runDemo}
-                  disabled={state === "rolling"}
-                  className={buttonClasses({
-                    variant: "primary",
-                    size: "lg",
-                  })}
+                  onClick={reset}
+                  className="mx-auto flex h-12 w-full max-w-md items-center justify-center gap-2 rounded-full border-2 border-[#FFD700] bg-transparent px-6 text-sm font-extrabold uppercase tracking-wide text-[#FFD700] transition-all hover:bg-[#FFD700] hover:text-[#054C2D]"
                 >
-                  {state === "rolling" ? (
-                    <>
-                      <Loader2 className="size-4 animate-spin" />
-                      Sorteando...
-                    </>
-                  ) : state === "settled" ? (
-                    <>
-                      <RefreshCw className="size-4" />
-                      Sortear novamente
-                    </>
-                  ) : (
-                    <>
-                      <Play className="size-4 fill-current" />
-                      Simular sorteio agora
-                    </>
-                  )}
+                  <RefreshCw className="size-4" />
+                  Simular de novo
                 </button>
-
-                {state === "settled" && (
-                  <button
-                    type="button"
-                    onClick={reset}
-                    className={buttonClasses({
-                      variant: "ghost",
-                      size: "lg",
-                    })}
-                  >
-                    Resetar
-                  </button>
-                )}
               </div>
-            </div>
-
-            {/* Bottom explainer */}
-            <div className="border-t border-foreground/[0.06] bg-secondary/40 px-6 py-5 text-center">
-              <p className="mx-auto max-w-2xl text-xs leading-relaxed text-muted-foreground">
-                Esse mesmo processo, em produção, é registrado em{" "}
-                <strong className="text-foreground">blockchain Polygon</strong>{" "}
-                ANTES do sorteio começar — impossível manipular. Cada
-                participante recebe link de verificação no WhatsApp.
-              </p>
-            </div>
+            )}
           </div>
+
+          <p className="mt-6 text-center text-sm text-white/80 sm:text-base">
+            Em produção, esse hash é registrado em blockchain{" "}
+            <strong className="text-[#FFD700]">ANTES</strong> do sorteio começar.
+            Impossível manipular o resultado.
+          </p>
         </div>
       </div>
     </section>

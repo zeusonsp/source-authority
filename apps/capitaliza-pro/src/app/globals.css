@@ -4,36 +4,37 @@
 
 @layer base {
   :root {
-    /* Capitaliza Pro — light mode premium (zeushigh-inspired) */
-    /* Off-white background, deep black text, signature gold accent */
-    --background: 0 0% 98%;             /* #FAFAFA */
-    --foreground: 0 0% 10%;             /* #1A1A1A */
+    /* Capitaliza Pro — vibe popular brasileira (Resenha-style)
+       Paleta: verde-bandeira #054C2D, amarelo gold #FFD700,
+       lilás #5C2D9C, branco #FFFFFF, cinza claro #F4F4F4, verde claro #16A34A */
+    --background: 0 0% 100%;             /* #FFFFFF */
+    --foreground: 0 0% 7%;               /* #121212 */
 
-    --card: 0 0% 100%;                   /* #FFFFFF */
-    --card-foreground: 0 0% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 7%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 10%;
+    --popover-foreground: 0 0% 7%;
 
-    --primary: 45 65% 48%;               /* Gold #C9A03A (slightly deeper for contrast on white) */
+    --primary: 270 56% 39%;              /* Lilás #5C2D9C */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 0 0% 96%;
-    --secondary-foreground: 0 0% 10%;
+    --secondary: 0 0% 96%;               /* #F4F4F4 */
+    --secondary-foreground: 0 0% 7%;
 
     --muted: 0 0% 96%;
-    --muted-foreground: 0 0% 38%;        /* #616161 */
+    --muted-foreground: 0 0% 38%;
 
-    --accent: 45 65% 48%;
-    --accent-foreground: 0 0% 100%;
-    --accent-light: 45 80% 92%;          /* Champagne tint #FAEFD2 */
+    --accent: 51 100% 50%;               /* Gold #FFD700 */
+    --accent-foreground: 0 0% 7%;
+    --accent-light: 51 100% 92%;
 
     --destructive: 0 70% 50%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 0 0% 90%;                  /* #E5E5E5 */
+    --border: 0 0% 90%;
     --input: 0 0% 90%;
-    --ring: 45 65% 48%;
+    --ring: 270 56% 39%;
 
     --radius: 0.75rem;
   }
@@ -48,45 +49,37 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
+    font-feature-settings: "rlig" 1, "calt" 1;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
 }
 
 @layer utilities {
-  /* Subtle gold pulse for badges */
-  @keyframes gold-pulse {
-    0%, 100% {
-      box-shadow: 0 0 0 0 hsl(var(--accent) / 0.4);
-    }
-    50% {
-      box-shadow: 0 0 0 8px hsl(var(--accent) / 0);
-    }
-  }
-  .animate-gold-pulse {
-    animation: gold-pulse 2.4s ease-in-out infinite;
-  }
-
-  /* Horizontal ticker slide */
+  /* Ticker horizontal infinito */
   @keyframes ticker {
     0% { transform: translateX(0); }
     100% { transform: translateX(-50%); }
   }
   .animate-ticker {
-    animation: ticker 40s linear infinite;
+    animation: ticker 35s linear infinite;
+    will-change: transform;
   }
 
-  /* Slot machine number tumble */
-  @keyframes tumble {
-    0%   { transform: translateY(0); }
-    100% { transform: translateY(-90%); }
+  /* Pulso amarelo nos selos de destaque */
+  @keyframes gold-pulse {
+    0%, 100% {
+      box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.6);
+    }
+    50% {
+      box-shadow: 0 0 0 12px rgba(255, 215, 0, 0);
+    }
   }
-  .animate-tumble {
-    animation: tumble 0.06s linear infinite;
+  .animate-gold-pulse {
+    animation: gold-pulse 2s ease-in-out infinite;
   }
 
-  /* Fade-in on reveal */
+  /* Fade-up suave */
   @keyframes fade-up {
     from { opacity: 0; transform: translateY(12px); }
     to   { opacity: 1; transform: translateY(0); }
@@ -95,26 +88,31 @@
     animation: fade-up 0.6s ease-out both;
   }
 
-  /* Premium grain texture overlay using radial gradient noise */
-  .bg-grain {
-    background-image:
-      radial-gradient(at 27% 37%, hsl(var(--accent-light) / 0.4) 0px, transparent 50%),
-      radial-gradient(at 97% 21%, hsl(var(--accent) / 0.08) 0px, transparent 50%),
-      radial-gradient(at 52% 99%, hsl(var(--accent-light) / 0.3) 0px, transparent 50%);
+  /* Wobble pra prêmios em destaque */
+  @keyframes wobble {
+    0%, 100% { transform: rotate(-1deg); }
+    50%      { transform: rotate(1deg); }
+  }
+  .animate-wobble {
+    animation: wobble 3.5s ease-in-out infinite;
+  }
+
+  /* Shine sweep nos botões CTA */
+  @keyframes shine {
+    0%   { background-position: -200% center; }
+    100% { background-position: 200% center; }
+  }
+  .animate-shine {
+    background-size: 200% auto;
+    animation: shine 3s linear infinite;
   }
 
   .text-balance {
     text-wrap: balance;
   }
 
-  /* Subtle reveal for sections — used by ScrollReveal */
-  .reveal-hidden {
-    opacity: 0;
-    transform: translateY(20px);
-    transition: opacity 0.7s ease-out, transform 0.7s ease-out;
-  }
-  .reveal-visible {
-    opacity: 1;
-    transform: translateY(0);
+  /* Estampa de "ESPECIAL" estilo carimbo */
+  .stamp {
+    transform: rotate(-8deg);
   }
 }
